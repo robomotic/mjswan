@@ -1,18 +1,24 @@
+"""MuscleMimic Demo
+
+https://github.com/amathislab/musclemimic
+"""
+
 import mujoco
 import musclemimic_models as mm
 
 import muwanx
 
-myofullbody_path = mm.get_xml_path("myofullbody")
-myofullbody_mjspec = mujoco.MjSpec.from_file(str(myofullbody_path))
-
 builder = muwanx.Builder()
 
 mm_project = builder.add_project(name="MuscleMimic Demo")
 
-mfb_scene = mm_project.add_scene(
-    spec=myofullbody_mjspec,
+mm_project.add_scene(
+    spec=mujoco.MjSpec.from_file(str(mm.get_xml_path("myofullbody"))),
     name="MyoFullBody",
+)
+mm_project.add_scene(
+    spec=mujoco.MjSpec.from_file(str(mm.get_xml_path("bimanual"))),
+    name="BimanualMuscle",
 )
 
 app = builder.build()
