@@ -1,4 +1,4 @@
-"""Test suite for muwanx.utils — _strip_leading_dotdot, _rewrite_xml_paths,
+"""Test suite for mjswan.utils — _strip_leading_dotdot, _rewrite_xml_paths,
 to_zip_deflated, and collect_spec_assets.
 """
 
@@ -14,7 +14,7 @@ from pathlib import Path
 import mujoco
 import pytest
 
-from muwanx.utils import (
+from mjswan.utils import (
     _make_zip_safe_path,
     _rewrite_xml_paths,
     _strip_leading_dotdot,
@@ -305,7 +305,7 @@ MYOSUITE_MODELS = [
 # A model with no .. paths (sanity check)
 SIMPLE_MODELS = [
     "assets/scene/mujoco_menagerie/shadow_hand/scene_left.xml",
-    "assets/scene/muwanx/unitree_g1/scene.xml",
+    "assets/scene/mjswan/unitree_g1/scene.xml",
 ]
 
 

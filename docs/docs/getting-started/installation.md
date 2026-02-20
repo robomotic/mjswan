@@ -4,7 +4,7 @@ icon: octicons/download-16
 
 # Installation
 
-muwanx can be installed using either Python (pip) or JavaScript (npm), depending on your preferred workflow.
+mjswan can be installed using either Python (pip) or JavaScript (npm), depending on your preferred workflow.
 
 <div class="grid cards" markdown>
 
@@ -40,36 +40,36 @@ muwanx can be installed using either Python (pip) or JavaScript (npm), depending
 
 ## Python Installation
 
-Install muwanx with pip:
+Install mjswan with pip:
 
 ```bash
-pip install muwanx
+pip install mjswan
 ```
 
 For development work, you can install with optional dependencies:
 
 ```bash
-pip install 'muwanx[dev]'
+pip install 'mjswan[dev]'
 ```
 
 For running examples:
 
 ```bash
-pip install 'muwanx[examples]'
+pip install 'mjswan[examples]'
 ```
 
 ## JavaScript Installation
 
-Install muwanx with npm:
+Install mjswan with npm:
 
 ```bash
-npm install muwanx
+npm install mjswan
 ```
 
 Or with yarn:
 
 ```bash
-yarn add muwanx
+yarn add mjswan
 ```
 
 ## GitHub Source
@@ -77,8 +77,8 @@ yarn add muwanx
 Clone the repository:
 
 ```bash
-git clone https://github.com/ttktjmt/muwanx.git
-cd muwanx
+git clone https://github.com/ttktjmt/mjswan.git
+cd mjswan
 ```
 
 Install dependencies:

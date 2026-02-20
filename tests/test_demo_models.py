@@ -16,10 +16,10 @@ DEMO_DIR = Path(__file__).parent.parent / "examples" / "demo"
 
 # List of all model paths used in full.py
 MODEL_PATHS = [
-    # Muwanx Demo Project
-    "assets/scene/muwanx/unitree_go2/scene.xml",
-    "assets/scene/muwanx/unitree_go1/go1.xml",
-    "assets/scene/muwanx/unitree_g1/scene.xml",
+    # mjswan Demo Project
+    "assets/scene/mjswan/unitree_go2/scene.xml",
+    "assets/scene/mjswan/unitree_go1/go1.xml",
+    "assets/scene/mjswan/unitree_g1/scene.xml",
     # MuJoCo Menagerie Project
     "assets/scene/mujoco_menagerie/agilex_piper/scene.xml",
     "assets/scene/mujoco_menagerie/agility_cassie/scene.xml",

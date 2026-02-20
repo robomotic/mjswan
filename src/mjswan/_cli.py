@@ -1,4 +1,4 @@
-"""CLI entry points for muwanx scripts."""
+"""CLI entry points for mjswan scripts."""
 
 import subprocess
 import sys

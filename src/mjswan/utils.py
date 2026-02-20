@@ -1,4 +1,4 @@
-"""Utility functions for muwanx."""
+"""Utility functions for mjswan."""
 
 from __future__ import annotations
 

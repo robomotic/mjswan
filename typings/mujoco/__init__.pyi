@@ -520,10 +520,10 @@ def to_zip(spec: _specs.MjSpec, file: typing.Union[str, typing.IO[bytes]]) -> No
       spec: The mjSpec to save to a file.
       file: The path to the file to save to or the file object to write to.
     """
-HEADERS_DIR: str = '/Users/tatsuki/projects/muwanx/.venv/lib/python3.13/site-packages/mujoco/include/mujoco'
-MjStruct: typing._UnionGenericAlias  # value = typing.Union[mujoco._specs.MjsBody, mujoco._specs.MjsFrame, mujoco._specs.MjsGeom, mujoco._specs.MjsJoint, mujoco._specs.MjsLight, mujoco._specs.MjsMaterial, mujoco._specs.MjsSite, mujoco._specs.MjsMesh, mujoco._specs.MjsSkin, mujoco._specs.MjsTexture, mujoco._specs.MjsText, mujoco._specs.MjsTuple, mujoco._specs.MjsCamera, mujoco._specs.MjsFlex, mujoco._specs.MjsHField, mujoco._specs.MjsKey, mujoco._specs.MjsNumeric, mujoco._specs.MjsPair, mujoco._specs.MjsExclude, mujoco._specs.MjsEquality, mujoco._specs.MjsTendon, mujoco._specs.MjsSensor, mujoco._specs.MjsActuator, mujoco._specs.MjsPlugin]
-PLUGINS_DIR: str = '/Users/tatsuki/projects/muwanx/.venv/lib/python3.13/site-packages/mujoco/plugin'
-PLUGIN_HANDLES: list  # value = [<CDLL '/Users/tatsuki/projects/muwanx/.venv/lib/python3.13/site-packages/mujoco/plugin/libsdf_plugin.dylib', handle 39d53d900 at 0x1080774d0>, <CDLL '/Users/tatsuki/projects/muwanx/.venv/lib/python3.13/site-packages/mujoco/plugin/libactuator.dylib', handle 39d53db60 at 0x109614b90>, <CDLL '/Users/tatsuki/projects/muwanx/.venv/lib/python3.13/site-packages/mujoco/plugin/libsensor.dylib', handle 39d53ddc0 at 0x1081f5cd0>, <CDLL '/Users/tatsuki/projects/muwanx/.venv/lib/python3.13/site-packages/mujoco/plugin/libelasticity.dylib', handle 39d53b470 at 0x1081f5e00>]
+HEADERS_DIR: str
+MjStruct: typing._UnionGenericAlias
+PLUGINS_DIR: str
+PLUGIN_HANDLES: list
 _SYSTEM: str = 'Darwin'
 __version__: str = '3.4.1'
 is_rosetta: bool = False

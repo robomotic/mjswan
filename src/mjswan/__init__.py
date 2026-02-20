@@ -1,11 +1,11 @@
-"""Muwanx: Browser-based MuJoCo Playground
+"""mjswan: Browser-based MuJoCo Playground
 
 Interactive MuJoCo simulations with ONNX policies running entirely in the browser.
 """
 
 __version__ = "0.0.9"
 
-from .app import MuwanxApp
+from .app import mjswanApp
 from .builder import Builder
 from .command import (
     Button,
@@ -23,7 +23,7 @@ from .scene import SceneConfig, SceneHandle
 __all__ = [
     # Builder and App
     "Builder",
-    "MuwanxApp",
+    "mjswanApp",
     # Handles
     "ProjectHandle",
     "SceneHandle",

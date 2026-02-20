@@ -110,7 +110,7 @@ class ClientBuilder:
 
     def sync_version_from_python(self) -> None:
         """Sync package.json version with Python package __version__."""
-        from muwanx import __version__
+        from mjswan import __version__
 
         package_json = self.project_dir / "package.json"
         with open(package_json, "r") as f:
@@ -153,7 +153,7 @@ class ClientBuilder:
             self.create_env(clean=clean)
             self.sync_version_from_python()
             self.install_dependencies()
-            env = {"MUWANX_BASE_PATH": base_path}
+            env = {"MJSWAN_BASE_PATH": base_path}
             self.run_build_script("build", env=env)
             print("✓ Build completed successfully")
         except subprocess.CalledProcessError as e:

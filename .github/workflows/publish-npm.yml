@@ -27,13 +27,13 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Build web template
-        working-directory: src/muwanx/template
+        working-directory: src/mjswan/template
         run: |
           npm install
           npm run build
 
       - name: Publish to npm
-        working-directory: src/muwanx/template
+        working-directory: src/mjswan/template
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_API_TOKEN }}
         run: npm publish --access public

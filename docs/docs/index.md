@@ -2,17 +2,17 @@
 icon: octicons/home-16
 ---
 
-# Welcome to muwanx!
+# Welcome to mjswan!
 
 <p align="center">
-  <img src="https://github.com/ttktjmt/muwanx/raw/main/assets/banner.png" alt="muwanx Header" style="width: 80%;">
+  <img src="https://github.com/ttktjmt/mjswan/raw/main/assets/banner.svg" alt="mjswan Header" style="width: 80%;">
   <br/>
   <strong><em>Real-time Interactive AI Robot Simulation in Your Browser</em></strong>
 </p>
 
-## What is muwanx?
+## What is mjswan?
 
-muwanx is a powerful framework for creating interactive MuJoCo simulations with real-time policy control, running entirely in the browser. Built on top of [**MU**joco **WA**sm](https://github.com/google-deepmind/mujoco/tree/main/wasm), [on**NX** runtime](https://github.com/microsoft/onnxruntime), and [three.js](https://github.com/mrdoob/three.js/), it enables easy sharing of AI robot simulation demos as static sites, perfect for GitHub Pages hosting.
+mjswan is a powerful framework for creating interactive MuJoCo simulations with real-time policy control, running entirely in the browser. Built on top of [**MU**joco **WA**sm](https://github.com/google-deepmind/mujoco/tree/main/wasm), [on**NX** runtime](https://github.com/microsoft/onnxruntime), and [three.js](https://github.com/mrdoob/three.js/), it enables easy sharing of AI robot simulation demos as static sites, perfect for GitHub Pages hosting.
 
 ## Key Features
 
@@ -58,7 +58,7 @@ muwanx is a powerful framework for creating interactive MuJoCo simulations with 
 
 ## Use Cases
 
-muwanx is perfect for:
+mjswan is perfect for:
 
 - **Research Demos**: Share your robot learning research with interactive visualizations
 - **Education**: Create interactive physics and robotics tutorials
@@ -67,19 +67,19 @@ muwanx is perfect for:
 
 ## Live Demos
 
-- [Main Demo](https://ttktjmt.github.io/muwanx) - Main muwanx demos
-- [MyoSuite](https://ttktjmt.github.io/muwanx/myosuite) - Musculoskeletal models
-- [MuJoCo Menagerie](https://ttktjmt.github.io/muwanx/menagerie) - Various high-quality robot models
-- [MuJoCo Playground](https://ttktjmt.github.io/muwanx/playground) - Interactive environments
+- [Main Demo](https://ttktjmt.github.io/mjswan) - Main mjswan demos
+- [MyoSuite](https://ttktjmt.github.io/mjswan/myosuite) - Musculoskeletal models
+- [MuJoCo Menagerie](https://ttktjmt.github.io/mjswan/menagerie) - Various high-quality robot models
+- [MuJoCo Playground](https://ttktjmt.github.io/mjswan/playground) - Interactive environments
 
 ## Quick Example
 
 ```py
 import mujoco
-import muwanx
+import mjswan
 
 # Create a builder
-builder = muwanx.Builder()
+builder = mjswan.Builder()
 
 # Add a project
 project = builder.add_project(name="My Robot")
@@ -110,10 +110,10 @@ app.launch()
 
 ## Community
 
-- [GitHub Repository](https://github.com/ttktjmt/muwanx)
-- [PyPI Package](https://pypi.org/project/muwanx)
-- [npm Package](https://www.npmjs.com/package/muwanx)
+- [GitHub Repository](https://github.com/ttktjmt/mjswan)
+- [PyPI Package](https://pypi.org/project/mjswan)
+- [npm Package](https://www.npmjs.com/package/mjswan)
 
 ## License
 
-muwanx is licensed under the [Apache-2.0 License](https://github.com/ttktjmt/muwanx/blob/main/LICENSE).
+mjswan is licensed under the [Apache-2.0 License](https://github.com/ttktjmt/mjswan/blob/main/LICENSE).

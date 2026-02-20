@@ -55,9 +55,9 @@ class PolicyHandle:
         policy.add_command(
             name="velocity",
             inputs=[
-                muwanx.Slider("lin_vel_x", "Forward Velocity", range=(-1.0, 1.0)),
-                muwanx.Slider("lin_vel_y", "Lateral Velocity", range=(-0.5, 0.5)),
-                muwanx.Slider("ang_vel_z", "Yaw Rate", range=(-1.0, 1.0)),
+                mjswan.Slider("lin_vel_x", "Forward Velocity", range=(-1.0, 1.0)),
+                mjswan.Slider("lin_vel_y", "Lateral Velocity", range=(-0.5, 0.5)),
+                mjswan.Slider("ang_vel_z", "Yaw Rate", range=(-1.0, 1.0)),
             ]
         )
     """
@@ -99,9 +99,9 @@ class PolicyHandle:
             policy.add_command(
                 name="velocity",
                 inputs=[
-                    muwanx.Slider("lin_vel_x", "Forward Velocity", range=(-1.0, 1.0)),
-                    muwanx.Slider("lin_vel_y", "Lateral Velocity", range=(-0.5, 0.5)),
-                    muwanx.Slider("ang_vel_z", "Yaw Rate", range=(-1.0, 1.0)),
+                    mjswan.Slider("lin_vel_x", "Forward Velocity", range=(-1.0, 1.0)),
+                    mjswan.Slider("lin_vel_y", "Lateral Velocity", range=(-0.5, 0.5)),
+                    mjswan.Slider("ang_vel_z", "Yaw Rate", range=(-1.0, 1.0)),
                 ]
             )
         """

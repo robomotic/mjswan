@@ -1,6 +1,6 @@
-"""Simple Muwanx Demo
+"""Simple mjswan Demo
 
-A basic example demonstrating how to use muwanx to create a viewer application
+A basic example demonstrating how to use mjswan to create a viewer application
 with multiple robot scenes (Go2, Go1, and G1).
 """
 
@@ -10,10 +10,10 @@ from pathlib import Path
 import mujoco
 import onnx
 
-import muwanx
+import mjswan
 
 
-def setup_builder() -> muwanx.Builder:
+def setup_builder() -> mjswan.Builder:
     """Set up and return the builder with demo projects configured.
 
     Creates a builder and adds a project with three robot scenes.
@@ -24,15 +24,15 @@ def setup_builder() -> muwanx.Builder:
     """
     # Ensure asset-relative paths resolve regardless of current working directory.
     os.chdir(Path(__file__).resolve().parent)
-    base_path = os.getenv("MUWANX_BASE_PATH", "/")
-    builder = muwanx.Builder(base_path=base_path)
+    base_path = os.getenv("MJSWAN_BASE_PATH", "/")
+    builder = mjswan.Builder(base_path=base_path)
 
     demo_project = builder.add_project(
-        name="Muwanx Demo",
+        name="mjswan Demo",
     )
 
     demo_project.add_scene(
-        spec=mujoco.MjSpec.from_file("assets/scene/muwanx/unitree_g1/scene.xml"),
+        spec=mujoco.MjSpec.from_file("assets/scene/mjswan/unitree_g1/scene.xml"),
         name="G1",
     ).add_policy(
         policy=onnx.load("assets/policy/unitree_g1/locomotion.onnx"),
@@ -45,7 +45,7 @@ def setup_builder() -> muwanx.Builder:
         default_lin_vel_y=0.0,
     )
     demo_project.add_scene(
-        model=mujoco.MjModel.from_xml_path("assets/scene/muwanx/unitree_go2/scene.xml"),
+        model=mujoco.MjModel.from_xml_path("assets/scene/mjswan/unitree_go2/scene.xml"),
         name="Go2",
     )
 
@@ -58,13 +58,13 @@ def main():
     Sets up the builder, builds the application, and launches it in a browser.
 
     Environment variables:
-        MUWANX_BASE_PATH: Base path for deployment (default: '/')
-        MUWANX_NO_LAUNCH: Set to '1' to skip launching the browser
+        MJSWAN_BASE_PATH: Base path for deployment (default: '/')
+        MJSWAN_NO_LAUNCH: Set to '1' to skip launching the browser
     """
     builder = setup_builder()
     # Build and launch the application
     app = builder.build()
-    if os.getenv("MUWANX_NO_LAUNCH") == "1":
+    if os.getenv("MJSWAN_NO_LAUNCH") == "1":
         return
     app.launch()
 

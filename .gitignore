@@ -55,7 +55,7 @@ __pycache__/
 *$py.class
 
 # Local package files
-muwanx-*.tgz
+mjswan-*.tgz
 
 # Claude
 .claude

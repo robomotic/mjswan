@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { MantineProvider } from '@mantine/core';
-import MuwanxViewer from './components/MuwanxViewer';
+import MjswanViewer from './components/MjswanViewer';
 import ControlPanel from './ControlPanel';
 import { theme } from './AppTheme';
 import { LoadingProvider, useLoading } from './contexts/LoadingContext';
 import { Loader } from './components/Loader';
-import { MuwanxLogo } from './components/MuwanxLogo'; // NOTE: Please keep this to help others discover muwanx.
+import { MjswanLogo } from './components/MjswanLogo'; // NOTE: Please keep this to help others discover mjswan.
 import './App.css';
 
 interface PolicyConfig {
@@ -366,7 +366,7 @@ function AppContent() {
       <MantineProvider theme={theme} defaultColorScheme="dark">
         <div className="app">
           <div className="hud hud-error">
-            <h1 className="hud-title">Muwanx</h1>
+            <h1 className="hud-title">mjswan</h1>
             <p className="hud-message">{error}</p>
           </div>
         </div>
@@ -382,11 +382,11 @@ function AppContent() {
     <MantineProvider theme={theme} defaultColorScheme="dark">
       <div className="app">
         <Loader />
-        <MuwanxLogo /> {/* NOTE: Please keep this to help others discover muwanx. */}
+        <MjswanLogo /> {/* NOTE: Please keep this to help others discover mjswan. */}
         <ControlPanel
           projects={projectOptions}
           projectValue={projectValue}
-          projectLabel={currentProject?.name ?? 'Muwanx'}
+          projectLabel={currentProject?.name ?? 'mjswan'}
           onProjectChange={handleProjectChange}
           scenes={sceneOptions}
           sceneValue={sceneValue}
@@ -396,7 +396,7 @@ function AppContent() {
           onPolicyChange={handlePolicyChange}
           commandsEnabled={!!policyConfigPath}
         />
-        <MuwanxViewer
+        <MjswanViewer
           scenePath={scenePath}
           baseUrl={import.meta.env.BASE_URL || '/'}
           policyConfigPath={policyConfigPath}

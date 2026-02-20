@@ -1,16 +1,16 @@
 """Hello World
 
 This is a simple "Hello World" example that demonstrates how to create a basic MuJoCo scene
-using the MuWanX viewer. It sets up a scene with a plane and a box above it, and launches the viewer.
+using the mjswan viewer. It sets up a scene with a plane and a box above it, and launches the viewer.
 """
 
 import mujoco
 
-import muwanx
+import mjswan
 
 
 def main():
-    builder = muwanx.Builder()
+    builder = mjswan.Builder()
     hello_world_project = builder.add_project(name="Hello World")
     spec = mujoco.MjSpec.from_string("""
     <mujoco>

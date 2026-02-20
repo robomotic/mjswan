@@ -30,13 +30,13 @@ jobs:
           node-version: '20'
 
       - name: Build web template
-        working-directory: src/muwanx/template
+        working-directory: src/mjswan/template
         run: |
           npm install
           npm run build
 
       - name: Remove artifacts from pypi package
-        working-directory: src/muwanx/template
+        working-directory: src/mjswan/template
         run: |
           rm -rf node_modules
           rm -rf .nodeenv

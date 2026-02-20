@@ -1,6 +1,6 @@
-# muwanx Documentation
+# mjswan Documentation
 
-This directory contains the documentation source files for muwanx which will be hosted on [Read the Docs](https://muwanx.readthedocs.io/).
+This directory contains the documentation source files for mjswan which will be hosted on [Read the Docs](https://mjswan.readthedocs.io/).
 
 ## Setup
 

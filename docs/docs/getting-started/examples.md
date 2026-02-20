@@ -12,10 +12,10 @@ Create a new file called `hello_world.py`:
 
 ```py
 import mujoco
-import muwanx
+import mjswan
 
 # Create a builder instance
-builder = muwanx.Builder()
+builder = mjswan.Builder()
 
 # Add a project
 project = builder.add_project(name="Hello World")
@@ -64,7 +64,7 @@ You should see an interactive 3D view with a green box falling onto a red plane!
 
 ### Port Already in Use
 
-If port 8080 is already in use, muwanx will automatically find an available port. You can also specify a custom port:
+If port 8080 is already in use, mjswan will automatically find an available port. You can also specify a custom port:
 
 ```python
 app.launch(port=8888)
@@ -84,4 +84,4 @@ app = builder.build(output_dir="./my_app")
 
 ### WebAssembly Not Supported
 
-muwanx requires a modern browser with WebAssembly support. Ensure you're using an up-to-date version of Chrome, Firefox, Safari, or Edge.
+mjswan requires a modern browser with WebAssembly support. Ensure you're using an up-to-date version of Chrome, Firefox, Safari, or Edge.

@@ -1,6 +1,6 @@
 """MJLab Integration Example with mjlab_myosuite
 
-This example demonstrates how to build muwanx projects using mjlab_myosuite setups.
+This example demonstrates how to build mjswan projects using mjlab_myosuite setups.
 """
 
 import os
@@ -11,11 +11,11 @@ import mjlab_myosuite  # noqa: F401, E402
 from mjlab.scene import Scene  # noqa: E402
 from mjlab.tasks.registry import list_tasks, load_env_cfg  # noqa: E402
 
-import muwanx  # noqa: E402
+import mjswan  # noqa: E402
 
 
 def main():
-    builder = muwanx.Builder()
+    builder = mjswan.Builder()
     project = builder.add_project(name="mjlab Examples")
 
     for task_id in list_tasks():

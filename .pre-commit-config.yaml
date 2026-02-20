@@ -27,8 +27,8 @@ repos:
         name: eslint
         entry: >
           npx eslint
-          --config src/muwanx/template/eslint.config.cjs
+          --config src/mjswan/template/eslint.config.cjs
           --fix
         language: node
-        files: ^src/muwanx/template/.*\.(js|jsx|ts|tsx)$
-        exclude: ^src/muwanx/template/src/mujoco/.*\.d\.ts$
+        files: ^src/mjswan/template/.*\.(js|jsx|ts|tsx)$
+        exclude: ^src/mjswan/template/src/mujoco/.*\.d\.ts$

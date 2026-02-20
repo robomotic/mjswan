@@ -4,11 +4,11 @@ icon: octicons/light-bulb-16
 
 # Core Concepts
 
-This guide introduces the core concepts and architecture of muwanx.
+This guide introduces the core concepts and architecture of mjswan.
 
 ## Architecture Overview
 
-muwanx follows a hierarchical structure:
+mjswan follows a hierarchical structure:
 
 ```
 Builder
@@ -22,7 +22,7 @@ Builder
 The `Builder` is the top-level object that orchestrates the entire application. It manages projects and handles the build process.
 
 ```python
-builder = muwanx.Builder(base_path="/")
+builder = mjswan.Builder(base_path="/")
 ```
 
 **Key responsibilities:**

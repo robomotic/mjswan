@@ -1,6 +1,6 @@
-"""MuwanxApp class for exporting and running applications.
+"""mjswanApp class for exporting and running applications.
 
-This module defines the MuwanxApp class which represents a built application
+This module defines the mjswanApp class which represents a built application
 that can be saved to disk or launched in a web browser.
 """
 
@@ -9,8 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 
 
-class MuwanxApp:
-    """A built muwanx application ready to be launched.
+class mjswanApp:
+    """A built mjswan application ready to be launched.
 
     This class encapsulates the built application and provides methods
     for launching it in a web browser.
@@ -92,4 +92,4 @@ class MuwanxApp:
             print("\nServer stopped.")
 
 
-__all__ = ["MuwanxApp"]
+__all__ = ["mjswanApp"]

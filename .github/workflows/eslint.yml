@@ -20,10 +20,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          cd src/muwanx/template
+          cd src/mjswan/template
           npm install
 
       - name: Run eslint
         run: |
-          cd src/muwanx/template
+          cd src/mjswan/template
           npx eslint .

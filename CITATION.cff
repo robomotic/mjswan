@@ -3,8 +3,7 @@
 
 cff-version: 1.2.0
 title: >-
-  muwanx: Browser-based MuJoCo simulation with real-time
-  policy control
+  mjswan: MuJoco Simulation on Web Assembly with Neural networks
 message: >-
   If you use this software, please cite it using the
   metadata from this file.
@@ -13,7 +12,7 @@ authors:
   - given-names: Tatsuki
     family-names: Tsujimoto
     email: tatsuki.tsujimoto@gmail.com
-repository-code: 'https://github.com/ttktjmt/muwanx'
+repository-code: 'https://github.com/ttktjmt/mjswan'
 keywords:
   - reinforcement-learning
   - mujoco

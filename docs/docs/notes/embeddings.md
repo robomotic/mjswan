@@ -4,17 +4,17 @@ icon: octicons/screen-full-16
 
 # Visualization Embeddings
 
-Embed muwanx visualizations in web pages or Jupyter notebooks for interactive demonstrations and sharing.
+Embed mjswan visualizations in web pages or Jupyter notebooks for interactive demonstrations and sharing.
 
 ## Web Page
 
-After hosting your muwanx application as a static site (e.g., via GitHub Pages), you can embed muwanx visualizations directly into your web pages (e.g., research articles, blogs) using an iframe.
+After hosting your mjswan application as a static site (e.g., via GitHub Pages), you can embed mjswan visualizations directly into your web pages (e.g., research articles, blogs) using an iframe.
 
 For example:
 
 ```html
 <iframe
-  src="https://ttktjmt.github.io/muwanx/"
+  src="https://ttktjmt.github.io/mjswan/"
   width="100%"
   height="600px"
   frameborder="0">
@@ -23,18 +23,18 @@ For example:
 
 ## Google Colab
 
-You can also embed muwanx visualizations directly in Google Colab notebooks.
+You can also embed mjswan visualizations directly in Google Colab notebooks.
 
 ### Build the app
 
 ```python
 import os
-os.environ["MUWANX_NO_LAUNCH"] = "1"
+os.environ["mjswan_NO_LAUNCH"] = "1"
 
-import muwanx
+import mjswan
 
 # Build your application
-builder = muwanx.Builder()
+builder = mjswan.Builder()
 project = builder.add_project(name="Demo")
 project.add_scene(model="path/to/model.xml", name="Scene")
 app = builder.build()
@@ -66,4 +66,4 @@ thread.start()
 output.serve_kernel_port_as_iframe(PORT, height=600)
 ```
 
-➔ Check out the full example: [examples/colab/demo.ipynb](https://github.com/ttktjmt/muwanx/blob/main/examples/colab/demo.ipynb){:target="_blank"}
+➔ Check out the full example: [examples/colab/demo.ipynb](https://github.com/ttktjmt/mjswan/blob/main/examples/colab/demo.ipynb){:target="_blank"}

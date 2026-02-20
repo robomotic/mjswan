@@ -23,7 +23,7 @@ function getVersionFromPython(): string {
 
 export default defineConfig({
   plugins: [react(), vanillaExtractPlugin()],
-  base: process.env.MUWANX_BASE_PATH || '/',
+  base: process.env.MJSWAN_BASE_PATH || '/',
   define: {
     __APP_VERSION__: JSON.stringify(getVersionFromPython()),
   },

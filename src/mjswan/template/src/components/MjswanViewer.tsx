@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { MuwanxRuntime } from '../core/engine/runtime';
+import { mjswanRuntime } from '../core/engine/runtime';
 import type { MainModule } from 'mujoco';
 
-type MuwanxViewerProps = {
+type MjswanViewerProps = {
   scenePath: string;
   baseUrl: string;
   policyConfigPath?: string | null;
@@ -11,16 +11,16 @@ type MuwanxViewerProps = {
   onReady?: () => void;
 };
 
-const MuwanxViewer: React.FC<MuwanxViewerProps> = ({
+const MjswanViewer = ({
   scenePath,
   baseUrl,
   policyConfigPath,
   onStatusChange,
   onError,
   onReady,
-}) => {
+}: MjswanViewerProps) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const runtimeRef = useRef<MuwanxRuntime | null>(null);
+  const runtimeRef = useRef<mjswanRuntime | null>(null);
   const mujocoRef = useRef<MainModule | null>(null);
 
   useEffect(() => {
@@ -53,7 +53,7 @@ const MuwanxViewer: React.FC<MuwanxViewerProps> = ({
       }
 
       if (!runtimeRef.current) {
-        runtimeRef.current = new MuwanxRuntime(mujoco, container, { baseUrl });
+        runtimeRef.current = new mjswanRuntime(mujoco, container, { baseUrl });
       }
 
       notify('Loading scene assets...');
@@ -83,4 +83,4 @@ const MuwanxViewer: React.FC<MuwanxViewerProps> = ({
   return <div ref={containerRef} className="viewer" />;
 };
 
-export default MuwanxViewer;
+export default MjswanViewer;

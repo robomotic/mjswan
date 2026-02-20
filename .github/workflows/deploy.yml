@@ -33,7 +33,7 @@ jobs:
         python -m pip install -e .
 
     - name: Build demo application
-      run: MUWANX_BASE_PATH="/muwanx/" MUWANX_NO_LAUNCH=1 python examples/demo/full.py
+      run: MJSWAN_BASE_PATH="/mjswan/" MJSWAN_NO_LAUNCH=1 python examples/demo/full.py
 
     - name: Deploy to gh-pages branch
       uses: peaceiris/actions-gh-pages@v4

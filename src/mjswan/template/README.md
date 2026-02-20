@@ -1,4 +1,4 @@
-# muwanx Web Viewer
+# mjswan Web Viewer
 
 Browser-based interactive viewer for MuJoCo robotics simulations with real-time policy control.
 
@@ -28,7 +28,7 @@ A React + TypeScript application that runs MuJoCo physics simulations entirely i
 ## Installation
 
 ```bash
-npm install muwanx
+npm install mjswan
 ```
 
 ## Development
@@ -99,7 +99,7 @@ assets/
 
 ## Core Architecture
 
-### MuwanxRuntime
+### mjswanRuntime
 
 Manages simulation, rendering, policy inference, and user interactions.
 Located in [src/core/runtime.ts](src/core/runtime.ts)
@@ -123,7 +123,7 @@ src/
 ├── index.tsx                # Application entry point
 ├── index.css                # Global styles
 ├── components/              # React components
-│   └── MuwanxViewer.tsx    # Main viewer component
+│   └── mjswanViewer.tsx    # Main viewer component
 ├── core/                    # Core engine
 │   ├── engine/             # Physics simulation
 │   ├── scene/              # Three.js scene setup
@@ -148,5 +148,5 @@ Apache-2.0
 
 ## Links
 
-- **Repository**: [github.com/ttktjmt/muwanx](https://github.com/ttktjmt/muwanx)
+- **Repository**: [github.com/ttktjmt/mjswan](https://github.com/ttktjmt/mjswan)
 - **Author**: Tatsuki Tsujimoto (tatsuki.tsujimoto@gmail.com)

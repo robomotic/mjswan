@@ -1,14 +1,14 @@
-// NOTE: Please keep this component to help others discover muwanx.
+// NOTE: Please keep this component to help others discover mjswan.
 import { Tooltip, Modal, Box, Image, Anchor, Divider, Text, Stack } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { MUWANX_VERSION } from '../Version';
+import { MJSWAN_VERSION } from '../Version';
 
-export function MuwanxLogo() {
+export function MjswanLogo() {
   const [aboutModalOpened, { open: openAbout, close: closeAbout }] = useDisclosure(false);
 
   return (
     <>
-      <Tooltip label={`muwanx ${MUWANX_VERSION}`}>
+      <Tooltip label={`mjswan ${MJSWAN_VERSION}`}>
         <Box
           style={{
             position: 'absolute',
@@ -36,10 +36,10 @@ export function MuwanxLogo() {
         <Stack gap="md" align="center">
           <Image src="./logo.svg" style={{ width: '5em', height: 'auto' }} />
           <Text size="xl" fw={700}>
-            muwanx
+            mjswan
           </Text>
           <Text size="sm" c="dimmed">
-            version {MUWANX_VERSION}
+            version {MJSWAN_VERSION}
           </Text>
           <Divider w="100%" />
           <Text size="sm">
@@ -48,7 +48,7 @@ export function MuwanxLogo() {
           <Stack gap="xs">
             <Box pb="lg">
               <Anchor
-                href="https://github.com/ttktjmt/muwanx"
+                href="https://github.com/ttktjmt/mjswan"
                 target="_blank"
                 style={{ fontWeight: "600" }}
               >
@@ -56,7 +56,7 @@ export function MuwanxLogo() {
               </Anchor>
               &nbsp;&nbsp;&bull;&nbsp;&nbsp;
               <Anchor
-                href="https://muwanx.readthedocs.io"
+                href="https://mjswan.readthedocs.io"
                 target="_blank"
                 style={{ fontWeight: "600" }}
               >

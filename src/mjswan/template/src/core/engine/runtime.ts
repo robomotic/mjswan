@@ -33,7 +33,7 @@ type BodyState = {
   quaternion: THREE.Quaternion;
 };
 
-export class MuwanxRuntime {
+export class mjswanRuntime {
   private mujoco: MainModule;
   private container: HTMLElement;
   private baseUrl: string;
@@ -235,7 +235,7 @@ export class MuwanxRuntime {
   private initializeCommandsFromConfig(commands: CommandsConfig): void {
     const commandManager = getCommandManager();
     commandManager.registerCommandsFromConfig(commands);
-    console.log('[MuwanxRuntime] Commands loaded from policy config:', Object.keys(commands));
+    console.log('[mjswanRuntime] Commands loaded from policy config:', Object.keys(commands));
   }
 
   /**
@@ -248,7 +248,7 @@ export class MuwanxRuntime {
       const state = this.policyStateBuilder.build();
       this.policyRunner.reset(state);
     }
-    console.log('[MuwanxRuntime] Simulation reset');
+    console.log('[mjswanRuntime] Simulation reset');
   }
 
   async loadScene(scenePath: string): Promise<void> {

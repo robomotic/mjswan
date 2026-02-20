@@ -1,7 +1,7 @@
-"""Muwanx Demo Application
+"""mjswan Demo Application
 
-This is a demo application showcasing the usage of muwanx.
-The demo app is hosted on GitHub Pages: https://muwanx.github.io/muwanx/
+This is a demo application showcasing the usage of mjswan.
+The demo app is hosted on GitHub Pages: https://mjswan.github.io/mjswan/
 """
 
 import os
@@ -10,10 +10,10 @@ from pathlib import Path
 import mujoco
 import onnx
 
-import muwanx
+import mjswan
 
 
-def setup_builder() -> muwanx.Builder:
+def setup_builder() -> mjswan.Builder:
     """Set up and return the builder with all demo projects configured.
 
     This function creates the builder and adds all projects, scenes, and policies
@@ -24,19 +24,19 @@ def setup_builder() -> muwanx.Builder:
     """
     # Ensure asset-relative paths resolve regardless of current working directory.
     os.chdir(Path(__file__).resolve().parent)
-    base_path = os.getenv("MUWANX_BASE_PATH", "/")
-    builder = muwanx.Builder(base_path=base_path)
+    base_path = os.getenv("MJSWAN_BASE_PATH", "/")
+    builder = mjswan.Builder(base_path=base_path)
 
     # =======================
-    # 1. Muwanx Demo Project
+    # 1. mjswan Demo Project
     # =======================
     demo_project = builder.add_project(
-        name="Muwanx Demo",
+        name="mjswan Demo",
     )
 
     # 1.A. Unitree G1
     g1_scene = demo_project.add_scene(
-        spec=mujoco.MjSpec.from_file("assets/scene/muwanx/unitree_g1/scene.xml"),
+        spec=mujoco.MjSpec.from_file("assets/scene/mjswan/unitree_g1/scene.xml"),
         name="G1",
     )
     g1_loco_policy = g1_scene.add_policy(
@@ -58,7 +58,7 @@ def setup_builder() -> muwanx.Builder:
 
     # 1.B. Unitree Go2
     go2_scene = demo_project.add_scene(
-        spec=mujoco.MjSpec.from_file("assets/scene/muwanx/unitree_go2/scene.xml"),
+        spec=mujoco.MjSpec.from_file("assets/scene/mjswan/unitree_go2/scene.xml"),
         name="Go2",
     )
     go2_scene.add_policy(
@@ -79,7 +79,7 @@ def setup_builder() -> muwanx.Builder:
 
     # 1.C. Unitree Go1
     go1_scene = demo_project.add_scene(
-        spec=mujoco.MjSpec.from_file("assets/scene/muwanx/unitree_go1/go1.xml"),
+        spec=mujoco.MjSpec.from_file("assets/scene/mjswan/unitree_go1/go1.xml"),
         name="Go1",
     )
     go1_scene.add_policy(
@@ -815,13 +815,13 @@ def main():
     """Main entry point for the demo application.
 
     Environment variables:
-        MUWANX_BASE_PATH: Base path for deployment (default: '/')
-        MUWANX_NO_LAUNCH: Set to '1' to skip launching the browser
+        MJSWAN_BASE_PATH: Base path for deployment (default: '/')
+        MJSWAN_NO_LAUNCH: Set to '1' to skip launching the browser
     """
     builder = setup_builder()
     # Build and launch the application
     app = builder.build()
-    if os.getenv("MUWANX_NO_LAUNCH") == "1":
+    if os.getenv("MJSWAN_NO_LAUNCH") == "1":
         return
     app.launch()
 

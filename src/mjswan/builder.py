@@ -1,4 +1,4 @@
-"""Builder class for constructing muwanx applications.
+"""Builder class for constructing mjswan applications.
 
 This module provides the main Builder class which serves as the entry point
 for programmatically creating interactive MuJoCo simulations.
@@ -17,13 +17,13 @@ import onnx
 
 from . import __version__
 from ._build_client import ClientBuilder
-from .app import MuwanxApp
+from .app import mjswanApp
 from .project import ProjectConfig, ProjectHandle
 from .utils import collect_spec_assets, name2id, to_zip_deflated
 
 
 class Builder:
-    """Builder for creating muwanx applications.
+    """Builder for creating mjswan applications.
 
     The Builder class provides a fluent API for programmatically constructing
     interactive MuJoCo simulations with ONNX policies. It handles projects, scenes, and policies hierarchically.
@@ -33,7 +33,7 @@ class Builder:
         """Initialize a new Builder instance.
 
         Args:
-            base_path: Base path for the application (e.g., '/muwanx/').
+            base_path: Base path for the application (e.g., '/mjswan/').
                       This is used for deployment to subdirectories.
         """
         self._projects: list[ProjectConfig] = []
@@ -65,10 +65,10 @@ class Builder:
         self._projects.append(project)
         return ProjectHandle(project, self)
 
-    def build(self, output_dir: str | Path | None = None) -> MuwanxApp:
+    def build(self, output_dir: str | Path | None = None) -> mjswanApp:
         """Build the application from the configured projects.
 
-        This method finalizes the configuration and creates a MuwanxApp
+        This method finalizes the configuration and creates a mjswanApp
         instance. If output_dir is provided, it also saves the application
         to that directory. If output_dir is not provided, it defaults to
         'dist' in the caller's directory.
@@ -78,7 +78,7 @@ class Builder:
                        If None, defaults to 'dist' in the caller's directory.
 
         Returns:
-            MuwanxApp instance ready to be launched.
+            mjswanApp instance ready to be launched.
         """
         if not self._projects:
             raise ValueError(
@@ -109,7 +109,7 @@ class Builder:
         # TODO: Build with separate function (and then save the web app with _save_web). And set scene.path and policy.path after building.
         self._save_web(output_path)
 
-        return MuwanxApp(output_path)
+        return mjswanApp(output_path)
 
     def _save_config_json(self, output_path: Path) -> None:
         """Save configuration as JSON.
@@ -208,7 +208,7 @@ class Builder:
             # Build client first
             package_json = template_dir / "package.json"
             if package_json.exists():
-                print("Building the muwanx application...")
+                print("Building the mjswan application...")
                 builder = ClientBuilder(template_dir)
                 builder.build(base_path=self._base_path)
 
@@ -361,7 +361,7 @@ class Builder:
                         with open(target, "w") as f:
                             json.dump(data, f, indent=2)
 
-        print(f"✓ Saved muwanx application to: {output_path}")
+        print(f"✓ Saved mjswan application to: {output_path}")
 
     def get_projects(self) -> list[ProjectConfig]:
         """Get a copy of all project configurations.

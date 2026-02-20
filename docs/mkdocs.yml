@@ -1,9 +1,9 @@
-site_name: Muwanx
-site_description: Documentation for the muwanx project.
-site_url: https://muwanx.readthedocs.io/
-repo_name: ttktjmt/muwanx
-repo_url: https://github.com/ttktjmt/muwanx
-copyright: '&copy;2026 Muwanx Contributors'
+site_name: mjswan
+site_description: Documentation for the mjswan project.
+site_url: https://mjswan.readthedocs.io/
+repo_name: ttktjmt/mjswan
+repo_url: https://github.com/ttktjmt/mjswan
+copyright: '&copy;2026 mjswan Contributors'
 
 nav:
   - Home: index.md
