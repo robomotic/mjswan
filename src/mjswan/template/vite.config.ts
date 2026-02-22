@@ -58,6 +58,10 @@ export default defineConfig({
     chunkSizeWarningLimit: 11000,
     rollupOptions: {
       input: path.resolve(__dirname, 'index.html'),
+      onwarn(warning, warn) {
+        if (warning.message.includes('coi-serviceworker')) return;
+        warn(warning);
+      },
     },
   },
   worker: {

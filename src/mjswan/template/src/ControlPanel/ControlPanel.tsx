@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Box, Button, Divider, Menu, Select, Slider, Text } from '@mantine/core';
-import { IconChevronDown, IconRefresh, IconRobot } from '@tabler/icons-react';
+import { Anchor, Box, Button, Divider, Image, Menu, Modal, Select, Slider, Stack, Text, Tooltip } from '@mantine/core';
+import { useDisclosure } from '@mantine/hooks';
+import { IconChevronDown, IconRefresh } from '@tabler/icons-react';
+import { MJSWAN_VERSION } from '../Version';
 import FloatingPanel from './FloatingPanel';
 import { LabeledInput } from './LabeledInput';
 import { CommandSection } from './CommandSection';
@@ -116,6 +118,8 @@ function ControlPanel(props: ControlPanelProps) {
     onReset,
   } = props;
 
+  const [aboutModalOpened, { open: openAbout, close: closeAbout }] = useDisclosure(false);
+
   // Command state
   const [commands, setCommands] = useState<CommandDefinition[]>([]);
   const [commandGroups, setCommandGroups] = useState<string[]>([]);
@@ -170,17 +174,43 @@ function ControlPanel(props: ControlPanelProps) {
   }
 
   return (
+    <>
+    <Modal
+      opened={aboutModalOpened}
+      onClose={closeAbout}
+      size="md"
+      title={null}
+      centered
+      styles={{ body: { textAlign: 'center' } }}
+    >
+      <Stack gap="md" align="center">
+        <Image src="./logo-color.svg" style={{ width: '8em', height: 'auto' }} />
+        <Text size="xl" fw={700}>powered by mjswan</Text>
+        <Text size="sm" c="dimmed">version {MJSWAN_VERSION}</Text>
+        <Divider w="100%" />
+        <Box pb="lg">
+          <Anchor href="https://github.com/ttktjmt/mjswan" target="_blank" style={{ fontWeight: '600' }}>
+            GitHub
+          </Anchor>
+          &nbsp;&nbsp;&bull;&nbsp;&nbsp;
+          <Anchor href="https://mjswan.readthedocs.io" target="_blank" style={{ fontWeight: '600' }}>
+            Documentation
+          </Anchor>
+        </Box>
+      </Stack>
+    </Modal>
     <FloatingPanel width="20em">
       <FloatingPanel.Handle>
+        <Tooltip label={`mjswan ${MJSWAN_VERSION}`}>
+          <Box
+            component="a"
+            onClick={(e) => { e.stopPropagation(); openAbout(); }}
+            style={{ position: "absolute", cursor: "pointer", display: "flex", top: "0.8em", left: "0.9em" }}
+          >
+            <Image src="./logo.svg" style={{ width: "1.2em", height: "auto" }} />
+          </Box>
+        </Tooltip>
         <div style={{ width: "1.1em" }} />
-        <IconRobot
-          color="#228be6"
-          style={{
-            position: "absolute",
-            width: "1.25em",
-            height: "1.25em",
-          }}
-        />
         <FloatingPanel.HideWhenCollapsed>
           <Box
             px="xs"
@@ -325,6 +355,7 @@ function ControlPanel(props: ControlPanelProps) {
         </Box>
       </FloatingPanel.Contents>
     </FloatingPanel>
+    </>
   );
 }
 
