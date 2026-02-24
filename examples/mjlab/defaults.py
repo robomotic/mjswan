@@ -1,6 +1,6 @@
-"""mjlab Integration Example - Visualize MuJoCo scenes from all mjlab tasks
+"""mjlab Integration Example - Visualize MuJoCo scenes from all mjlab default tasks
 
-Extracts the MuJoCo model from each mjlab task and visualizes them
+Extracts the MuJoCo model from each mjlab default task and visualizes them
 in the browser using mjswan.
 """
 
