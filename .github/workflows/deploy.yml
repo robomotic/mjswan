@@ -4,6 +4,11 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    paths:
+      - 'examples/demo/main.py'
+      - 'src/mjswan/**'
+      - 'pyproject.toml'
+      - '.github/workflows/deploy.yml'
 
 permissions:
   contents: write
