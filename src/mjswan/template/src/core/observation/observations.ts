@@ -405,12 +405,14 @@ export class BaseLinearVelocity extends ObservationBase {
   private historySteps: number;
   private history: Float32Array[];
   private scale: Float32Array | null;
+  private worldFrame: boolean;
 
   constructor(runner: PolicyRunner, config: ObservationConfig) {
     super(runner, config);
     this.historySteps = Math.max(1, Math.floor((config.history_steps as number | undefined) ?? 1));
     this.history = Array.from({ length: this.historySteps }, () => new Float32Array(3));
     this.scale = normalizeScale(config.scale, 3, 1.0);
+    this.worldFrame = (config.world_frame as boolean | undefined) ?? true;
   }
 
   get size(): number {
@@ -446,7 +448,12 @@ export class BaseLinearVelocity extends ObservationBase {
 
   private computeCurrent(state?: PolicyState): Float32Array {
     const value = state?.rootLinVel ?? new Float32Array(3);
-    const out = new Float32Array(value);
+    let out = new Float32Array(value);
+    if (!this.worldFrame) {
+      const quat = normalizeQuat(state?.rootQuat ?? [1, 0, 0, 0]);
+      const rotated = quatApplyInv(quat, out);
+      out = new Float32Array(rotated);
+    }
     if (this.scale) {
       for (let i = 0; i < out.length; i++) {
         out[i] *= this.scale[i] ?? 1.0;
@@ -460,14 +467,12 @@ export class BaseAngularVelocity extends ObservationBase {
   private historySteps: number;
   private history: Float32Array[];
   private scale: Float32Array | null;
-  private worldFrame: boolean;
 
   constructor(runner: PolicyRunner, config: ObservationConfig) {
     super(runner, config);
     this.historySteps = Math.max(1, Math.floor((config.history_steps as number | undefined) ?? 1));
     this.history = Array.from({ length: this.historySteps }, () => new Float32Array(3));
     this.scale = normalizeScale(config.scale, 3, 1.0);
-    this.worldFrame = Boolean(config.world_frame);
   }
 
   get size(): number {
@@ -503,12 +508,7 @@ export class BaseAngularVelocity extends ObservationBase {
 
   private computeCurrent(state?: PolicyState): Float32Array {
     const value = state?.rootAngVel ?? new Float32Array(3);
-    let out = new Float32Array(value);
-    if (!this.worldFrame) {
-      const quat = normalizeQuat(state?.rootQuat ?? [1, 0, 0, 0]);
-      const rotated = quatApplyInv(quat, out);
-      out = new Float32Array(rotated);
-    }
+    const out = new Float32Array(value);
     if (this.scale) {
       for (let i = 0; i < out.length; i++) {
         out[i] *= this.scale[i] ?? 1.0;
