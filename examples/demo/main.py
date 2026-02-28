@@ -5,14 +5,77 @@ The demo app is hosted on GitHub Pages: https://ttktjmt.github.io/mjswan/
 """
 
 import os
+import posixpath
 from pathlib import Path
 
+import gymnasium.logger as gym_logger
 import mujoco
 import onnx
 from mjlab.scene import Scene
 from mjlab.tasks.registry import load_env_cfg
+from mujoco_playground import registry
 
-import mjswan
+_prev_gym_level = gym_logger.min_level
+gym_logger.set_level(gym_logger.DISABLED)
+
+from myosuite import gym_registry_specs  # noqa: E402
+from myosuite.envs.myo import myochallenge  # noqa: E402, F401 - for env registration
+
+gym_logger.set_level(_prev_gym_level)
+
+from robot_descriptions._descriptions import DESCRIPTIONS  # noqa: E402
+
+import mjswan  # noqa: E402
+
+
+def _fix_unitree_mujoco_macos() -> None:
+    """Pre-fix the unitree_mujoco cache on macOS to avoid case-sensitivity errors.
+
+    On macOS (case-insensitive filesystem), robot_descriptions fails to checkout
+    the unitree_mujoco repo because git history contains a rename from
+    terrain.STL -> terrain.stl, which macOS treats as the same file.
+
+    Fix: clone with --no-checkout so no files exist in the working tree before
+    the target commit is checked out, and set core.ignorecase=false so git
+    handles the case-rename correctly.
+    """
+    import platform
+    import shutil
+    import subprocess
+
+    if platform.system() != "Darwin":
+        return
+
+    cache_dir = Path.home() / ".cache/robot_descriptions/unitree_mujoco"
+
+    if cache_dir.exists():
+        result = subprocess.run(
+            ["git", "config", "core.ignorecase"],
+            cwd=cache_dir,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.stdout.strip() == "false":
+            return  # Already correctly configured
+        shutil.rmtree(cache_dir)
+
+    print("Preparing unitree_mujoco cache for macOS (one-time setup)...")
+    subprocess.run(
+        [
+            "git",
+            "clone",
+            "--no-checkout",
+            "https://github.com/unitreerobotics/unitree_mujoco.git",
+            str(cache_dir),
+        ],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "core.ignorecase", "false"],
+        cwd=cache_dir,
+        check=True,
+    )
 
 
 def setup_builder() -> mjswan.Builder:
@@ -24,6 +87,7 @@ def setup_builder() -> mjswan.Builder:
     Returns:
         Configured Builder instance ready to be built.
     """
+    # _fix_unitree_mujoco_macos()
     # Ensure asset-relative paths resolve regardless of current working directory.
     os.chdir(Path(__file__).resolve().parent)
     base_path = os.getenv("MJSWAN_BASE_PATH", "/")
@@ -32,9 +96,8 @@ def setup_builder() -> mjswan.Builder:
     # =======================
     # 1. mjswan Demo Project
     # =======================
-    demo_project = builder.add_project(
-        name="mjswan Demo",
-    )
+
+    demo_project = builder.add_project(name="mjswan Demo")
 
     # 1.A. Unitree G1
     g1_scene = demo_project.add_scene(
@@ -98,41 +161,10 @@ def setup_builder() -> mjswan.Builder:
     # ============================
     # 2. MuJoCo Menagerie Project
     # ============================
-    menagerie_project = builder.add_project(
-        name="MuJoCo Menagerie",
-        id="menagerie",
-    )
 
-    menagerie_project.add_scene(
-        name="Agilex Piper",
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/agilex_piper/scene.xml"
-        ),
-    )
-    menagerie_project.add_scene(
-        name="Agility Cassie",
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/agility_cassie/scene.xml"
-        ),
-    )
-    menagerie_project.add_scene(
-        name="ALOHA",
-        spec=mujoco.MjSpec.from_file("assets/scene/mujoco_menagerie/aloha/scene.xml"),
-    )
-    menagerie_project.add_scene(
-        name="ANYmal B",
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/anybotics_anymal_b/scene.xml"
-        ),
-    )
-    menagerie_project.add_scene(
-        name="ANYmal C",
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/anybotics_anymal_c/scene.xml"
-        ),
-    )
+    menagerie_project = builder.add_project(name="MuJoCo Menagerie", id="menagerie")
 
-    # Anymal C from mujocolab/anymal_c_velocity
+    # ANYmal C Velocity (uses mjlab, not robot_descriptions)
     anymal_c_velocity_env_cfg = load_env_cfg("Mjlab-Velocity-Flat-Anymal-C")
     anymal_c_velocity_env_cfg.scene.num_envs = 1
     anymal_c_velocity_scene = Scene(anymal_c_velocity_env_cfg.scene, device="cpu")
@@ -155,684 +187,85 @@ def setup_builder() -> mjswan.Builder:
         default_ang_vel_z=0.0,
     )
 
-    menagerie_project.add_scene(
-        name="Apptronik Apollo",
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/apptronik_apollo/scene.xml"
-        ),
-    )
-    menagerie_project.add_scene(
-        name="ARX L5",
-        spec=mujoco.MjSpec.from_file("assets/scene/mujoco_menagerie/arx_l5/scene.xml"),
-    )
-    menagerie_project.add_scene(
-        name="Berkeley Humanoid",
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/berkeley_humanoid/scene.xml"
-        ),
-    )
-    menagerie_project.add_scene(
-        name="Bitcraze Crazyflie 2",
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/bitcraze_crazyflie_2/scene.xml"
-        ),
-    )
-    menagerie_project.add_scene(
-        name="Booster T1",
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/booster_t1/scene.xml"
-        ),
-    )
-    menagerie_project.add_scene(
-        name="Boston Dynamics Spot",
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/boston_dynamics_spot/scene.xml"
-        ),
-    )
-    menagerie_project.add_scene(
-        name="Dynamixel 2R",
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/dynamixel_2r/scene.xml"
-        ),
-    )
-    menagerie_project.add_scene(
-        name="Flybody",
-        spec=mujoco.MjSpec.from_file("assets/scene/mujoco_menagerie/flybody/scene.xml"),
-    )
-    menagerie_project.add_scene(
-        name="Fourier N1",
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/fourier_n1/scene.xml"
-        ),
-    )
-    menagerie_project.add_scene(
-        name="Franka Emika Panda",
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/franka_emika_panda/scene.xml"
-        ),
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/franka_fr3/scene.xml"
-        ),
-        name="Franka FR3",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/google_barkour_v0/scene.xml"
-        ),
-        name="Google Barkour v0",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/google_barkour_vb/scene.xml"
-        ),
-        name="Google Barkour vB",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/google_robot/scene.xml"
-        ),
-        name="Google Robot",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/hello_robot_stretch/scene.xml"
-        ),
-        name="Hello Robot Stretch",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/hello_robot_stretch_3/scene.xml"
-        ),
-        name="Hello Robot Stretch 3",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/i2rt_yam/scene.xml"
-        ),
-        name="i2RT YAM",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/iit_softfoot/scene.xml"
-        ),
-        name="IIT SoftFoot",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/kinova_gen3/scene.xml"
-        ),
-        name="Kinova Gen3",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/kuka_iiwa_14/scene.xml"
-        ),
-        name="KUKA iiwa 14",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/leap_hand/scene_left.xml"
-        ),
-        name="LEAP Hand Left",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/leap_hand/scene_right.xml"
-        ),
-        name="LEAP Hand Right",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/low_cost_robot_arm/scene.xml"
-        ),
-        name="Low Cost Robot Arm",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/pal_talos/scene_motor.xml"
-        ),
-        name="PAL Talos (Motor Control)",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/pal_talos/scene_position.xml"
-        ),
-        name="PAL Talos (Position Control)",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/pal_tiago/scene_motor.xml"
-        ),
-        name="PAL TIAGo (Motor Control)",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/pal_tiago/scene_position.xml"
-        ),
-        name="PAL TIAGo (Position Control)",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/pal_tiago/scene_velocity.xml"
-        ),
-        name="PAL TIAGo (Velocity Control)",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/pal_tiago_dual/scene_motor.xml"
-        ),
-        name="PAL TIAGo Dual (Motor Control)",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/pal_tiago_dual/scene_position.xml"
-        ),
-        name="PAL TIAGo Dual (Position Control)",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/pal_tiago_dual/scene_velocity.xml"
-        ),
-        name="PAL TIAGo Dual (Velocity Control)",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/pndbotics_adam_lite/scene.xml"
-        ),
-        name="PNDBiotics Adam Lite",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/rethink_robotics_sawyer/scene.xml"
-        ),
-        name="Rethink Robotics Sawyer",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/robot_soccer_kit/scene.xml"
-        ),
-        name="Robot Soccer Kit",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/robotiq_2f85/scene.xml"
-        ),
-        name="Robotiq 2F85",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/robotiq_2f85_v4/scene.xml"
-        ),
-        name="Robotiq 2F85 v4",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/robotis_op3/scene.xml"
-        ),
-        name="Robotis OP3",
-    )
-    # menagerie_project.add_scene(
-    #     spec=mujoco.MjSpec.from_file("assets/scene/mujoco_menagerie/shadow_dexee/scene.xml"),
-    #     name="Shadow DEXEE",
-    # )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/shadow_hand/scene_left.xml"
-        ),
-        name="Shadow Hand Left",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/shadow_hand/scene_right.xml"
-        ),
-        name="Shadow Hand Right",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/skydio_x2/scene.xml"
-        ),
-        name="Skydio X2",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/stanford_tidybot/scene.xml"
-        ),
-        name="Stanford TidyBot",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/tetheria_aero_hand_open/scene_right.xml"
-        ),
-        name="TetherIA Aero Hand Open",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/trossen_vx300s/scene.xml"
-        ),
-        name="Trossen VX300S",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/trossen_wx250s/scene.xml"
-        ),
-        name="Trossen WX250S",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/trs_so_arm100/scene.xml"
-        ),
-        name="TRS SO-ARM100",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/ufactory_lite6/scene.xml"
-        ),
-        name="UFactory Lite6",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/ufactory_xarm7/scene.xml"
-        ),
-        name="UFactory xArm7",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/umi_gripper/scene.xml"
-        ),
-        name="UMI Gripper",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/unitree_a1/scene.xml"
-        ),
-        name="Unitree A1",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/unitree_g1/scene.xml"
-        ),
-        name="Unitree G1",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/unitree_go1/scene.xml"
-        ),
-        name="Unitree Go1",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/unitree_go2/scene.xml"
-        ),
-        name="Unitree Go2",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/unitree_h1/scene.xml"
-        ),
-        name="Unitree H1",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/unitree_z1/scene.xml"
-        ),
-        name="Unitree Z1",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/universal_robots_ur5e/scene.xml"
-        ),
-        name="Universal Robots UR5e",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/universal_robots_ur10e/scene.xml"
-        ),
-        name="Universal Robots UR10e",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/wonik_allegro/scene_left.xml"
-        ),
-        name="Wonik Allegro Left",
-    )
-    menagerie_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_menagerie/wonik_allegro/scene_right.xml"
-        ),
-        name="Wonik Allegro Right",
-    )
+    def _rd_spec(module_name: str) -> mujoco.MjSpec:
+        from importlib import import_module
+
+        mjcf_path = Path(import_module(f"robot_descriptions.{module_name}").MJCF_PATH)
+        # Prefer scene.xml (floor + lights) over the robot-only MJCF when available.
+        scene_path = mjcf_path.parent / "scene.xml"
+        return mujoco.MjSpec.from_file(
+            str(scene_path if scene_path.exists() else mjcf_path)
+        )
+
+    for module, desc in DESCRIPTIONS.items():
+        if desc.has_mjcf:
+            scene_name = module.replace("_mj_description", "")
+            scene_name = " ".join([word.capitalize() for word in scene_name.split("_")])
+
+            menagerie_project.add_scene(name=scene_name, spec=_rd_spec(module))
 
     # =============================
     # 3. MuJoCo Playground Project
     # =============================
-    playground_project = builder.add_project(
-        name="MuJoCo Playground",
-        id="playground",
-    )
 
-    # DeepMind Control Suite
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/dm_control_suite/xmls/acrobot.xml"
-        ),
-        name="DMC Acrobot",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/dm_control_suite/xmls/ball_in_cup.xml"
-        ),
-        name="DMC Ball In Cup",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/dm_control_suite/xmls/cartpole.xml"
-        ),
-        name="DMC Cartpole",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/dm_control_suite/xmls/cheetah.xml"
-        ),
-        name="DMC Cheetah",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/dm_control_suite/xmls/finger.xml"
-        ),
-        name="DMC Finger",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/dm_control_suite/xmls/fish.xml"
-        ),
-        name="DMC Fish",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/dm_control_suite/xmls/hopper.xml"
-        ),
-        name="DMC Hopper",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/dm_control_suite/xmls/humanoid.xml"
-        ),
-        name="DMC Humanoid",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/dm_control_suite/xmls/manipulator.xml"
-        ),
-        name="DMC Manipulator",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/dm_control_suite/xmls/pendulum.xml"
-        ),
-        name="DMC Pendulum",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/dm_control_suite/xmls/point_mass.xml"
-        ),
-        name="DMC Point Mass",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/dm_control_suite/xmls/reacher.xml"
-        ),
-        name="DMC Reacher",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/dm_control_suite/xmls/swimmer.xml"
-        ),
-        name="DMC Swimmer",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/dm_control_suite/xmls/walker.xml"
-        ),
-        name="DMC Walker",
-    )
+    playground_project = builder.add_project(name="MuJoCo Playground", id="playground")
 
-    # Manipulation Tasks
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/manipulation/leap_hand/xmls/scene_mjx_cube.xml"
-        ),
-        name="LEAP Hand Cube",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/manipulation/franka_emika_panda/xmls/mjx_single_cube.xml"
-        ),
-        name="Panda Single Cube",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/manipulation/franka_emika_panda/xmls/mjx_single_cube_camera.xml"
-        ),
-        name="Panda Single Cube (Camera)",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/manipulation/franka_emika_panda/xmls/mjx_cabinet.xml"
-        ),
-        name="Panda Cabinet",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/manipulation/aloha/xmls/mjx_hand_over.xml"
-        ),
-        name="ALOHA Hand Over",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/manipulation/aloha/xmls/mjx_single_peg_insertion.xml"
-        ),
-        name="ALOHA Single Peg Insertion",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/manipulation/franka_emika_panda_robotiq/xmls/scene_panda_robotiq_cube.xml"
-        ),
-        name="Panda Robotiq Cube",
-    )
+    for env_name in registry.ALL_ENVS:
+        if "Sparse" in env_name:
+            continue
 
-    # Locomotion Tasks
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/locomotion/go1/xmls/scene_mjx_flat_terrain.xml"
-        ),
-        name="Go1 Flat Terrain",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/locomotion/go1/xmls/scene_mjx_feetonly_flat_terrain.xml"
-        ),
-        name="Go1 FeetOnly Flat",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/locomotion/go1/xmls/scene_mjx_feetonly_bowl.xml"
-        ),
-        name="Go1 FeetOnly Bowl",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/locomotion/go1/xmls/scene_mjx_feetonly_rough_terrain.xml"
-        ),
-        name="Go1 FeetOnly Rough",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/locomotion/go1/xmls/scene_mjx_feetonly_stairs.xml"
-        ),
-        name="Go1 FeetOnly Stairs",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/locomotion/go1/xmls/scene_mjx_fullcollisions_flat_terrain.xml"
-        ),
-        name="Go1 FullCollisions Flat",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/locomotion/g1/xmls/scene_mjx_feetonly.xml"
-        ),
-        name="G1 FeetOnly",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/locomotion/g1/xmls/scene_mjx_feetonly_flat_terrain.xml"
-        ),
-        name="G1 FeetOnly Flat",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/locomotion/g1/xmls/scene_mjx_feetonly_rough_terrain.xml"
-        ),
-        name="G1 FeetOnly Rough",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/locomotion/h1/xmls/scene_mjx_feetonly.xml"
-        ),
-        name="H1 FeetOnly",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/locomotion/t1/xmls/scene_mjx_feetonly_flat_terrain.xml"
-        ),
-        name="T1 FeetOnly Flat",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/locomotion/t1/xmls/scene_mjx_feetonly_rough_terrain.xml"
-        ),
-        name="T1 FeetOnly Rough",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/locomotion/spot/xmls/scene_mjx_flat_terrain.xml"
-        ),
-        name="Spot Flat Terrain",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/locomotion/spot/xmls/scene_mjx_feetonly_flat_terrain.xml"
-        ),
-        name="Spot FeetOnly Flat",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/locomotion/apollo/xmls/scene_mjx_feetonly_flat_terrain.xml"
-        ),
-        name="Apollo FeetOnly Flat",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/locomotion/op3/xmls/scene_mjx_feetonly.xml"
-        ),
-        name="OP3 FeetOnly",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/locomotion/berkeley_humanoid/xmls/scene_mjx_feetonly_flat_terrain.xml"
-        ),
-        name="Berkeley Humanoid Flat",
-    )
-    playground_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/mujoco_playground/mujoco_playground/_src/locomotion/berkeley_humanoid/xmls/scene_mjx_feetonly_rough_terrain.xml"
-        ),
-        name="Berkeley Humanoid Rough",
-    )
+        env = registry.load(env_name)
+        xml_content = open(env.xml_path).read()
+        spec = mujoco.MjSpec.from_string(xml_content, env.model_assets)
+
+        # model_assets is consumed at parse time but not stored in spec.assets.
+        # Remap basename keys (as in env.model_assets) to the effective paths
+        # that spec.to_xml() looks up: dir/file (or just file when dir is empty).
+        mesh_dir = spec.meshdir or ""
+        tex_dir = spec.texturedir or ""
+
+        def _add(directory: str, filename: str) -> None:
+            if not filename:
+                return
+            key = posixpath.join(directory, filename) if directory else filename
+            basename = os.path.basename(key)
+            if basename in env.model_assets:
+                spec.assets[key] = env.model_assets[basename]
+
+        for mesh in spec.meshes:
+            _add(mesh_dir, mesh.file)
+        for texture in spec.textures:
+            _add(tex_dir, texture.file)
+            for cf in texture.cubefiles:
+                _add(tex_dir, cf)
+        for hfield in spec.hfields:
+            _add("", hfield.file)
+
+        playground_project.add_scene(name=env_name, spec=spec)
 
     # ====================
     # 4. MyoSuite Project
     # ====================
-    myosuite_project = builder.add_project(
-        name="MyoSuite",
-        id="myosuite",
-    )
 
-    # Base MyoSuite scenes
-    myosuite_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/myosuite/myosuite/simhive/myo_sim/hand/myohand.xml"
-        ),
-        name="Hand",
-    )
-    myosuite_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/myosuite/myosuite/simhive/myo_sim/arm/myoarm.xml"
-        ),
-        name="Arm",
-    )
-    myosuite_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/myosuite/myosuite/simhive/myo_sim/elbow/myoelbow_2dof6muscles.xml"
-        ),
-        name="Elbow",
-    )
-    myosuite_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/myosuite/myosuite/simhive/myo_sim/leg/myolegs.xml"
-        ),
-        name="Legs",
-    )
-    myosuite_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/myosuite/myosuite/simhive/myo_sim/finger/myofinger_v0.xml"
-        ),
-        name="Finger",
-    )
+    myosuite_project = builder.add_project(name="MyoSuite", id="myosuite")
 
-    # MyoChallenge 2023 scenes
-    myosuite_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/myosuite/myosuite/envs/myo/assets/arm/myoarm_relocate.xml"
-        ),
-        name="mc23_Relocate",
-    )
-    myosuite_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/myosuite/myosuite/envs/myo/assets/leg/myolegs_chasetag.xml"
-        ),
-        name="mc23_ChaseTag",
-    )
+    registry_specs = gym_registry_specs()
 
-    # MyoChallenge 2024 scenes
-    myosuite_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/myosuite/myosuite/envs/myo/assets/arm/myoarm_bionic_bimanual.xml"
-        ),
-        name="mc24_Bimanual",
-    )
-    myosuite_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/myosuite/myosuite/envs/myo/assets/leg/myoosl_runtrack.xml"
-        ),
-        name="mc24_RunTrack",
-    )
+    target_env_name_map = {
+        "myoChallengeDieReorientP2-v0": "mc22 Die Reorient",
+        "myoChallengeBaodingP2-v1": "mc22 Baoding",
+        "myoChallengeRelocateP2-v0": "mc23 Relocate",
+        "myoChallengeChaseTagP2-v0": "mc23 Chase Tag",
+        "myoChallengeBimanual-v0": "mc24 Bimanual",
+        "myoChallengeOslRunRandom-v0": "mc24 OSL Run",
+        "myoChallengeTableTennisP2-v0": "mc25 Table Tennis",
+        "myoChallengeSoccerP2-v0": "mc25 Soccer",
+    }
 
-    # MyoChallenge 2025 scenes
-    myosuite_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/myosuite/myosuite/envs/myo/assets/arm/myoarm_tabletennis.xml"
-        ),
-        name="mc25_TableTennis",
-    )
-    myosuite_project.add_scene(
-        spec=mujoco.MjSpec.from_file(
-            "assets/scene/myosuite/myosuite/envs/myo/assets/leg_soccer/myolegs_soccer.xml"
-        ),
-        name="mc25_Soccer",
-    )
+    for env_name, display_name in target_env_name_map.items():
+        model_path = registry_specs[env_name].kwargs["model_path"]
+        mjspec = mujoco.MjSpec.from_file(model_path)
+        myosuite_project.add_scene(name=display_name, spec=mjspec)
 
     return builder
 
@@ -847,9 +280,8 @@ def main():
     builder = setup_builder()
     # Build and launch the application
     app = builder.build()
-    if os.getenv("MJSWAN_NO_LAUNCH") == "1":
-        return
-    app.launch()
+    if os.getenv("MJSWAN_NO_LAUNCH") != "1":
+        app.launch()
 
 
 if __name__ == "__main__":

@@ -28,7 +28,11 @@ authors = [
 description = "Browser-based MuJoCo simulation with real-time policy control"
 readme = "README.md"
 license = { text="Apache-2.0" }
-requires-python = ">=3.10"
+# labmaze (transitive dep via myosuite -> dm-control) has no pre-built wheel for
+# Python 3.13+, forcing a Bazel source build that fails with Bazel 8.x (WORKSPACE
+# support removed). Pin to <3.13 until labmaze publishes a cp313 wheel.
+# https://github.com/google-deepmind/dm_control/issues/511
+requires-python = ">=3.10, <3.13"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -65,6 +69,9 @@ examples = [
     "torch>=2.9.1",
     "musclemimic-models>=1.0.3",
     "anymal-c-velocity",
+    "robot-descriptions>=1.22.0",
+    "playground>=0.1.0",
+    "myosuite",
 ]
 
 [project.urls]
@@ -112,9 +119,6 @@ lint.ignore = [
 exclude = [
     ".nodeenv",
     "typings",
-    "examples/demo/assets/scene/myosuite",
-    "examples/demo/assets/scene/mujoco_menagerie",
-    "examples/demo/assets/scene/mujoco_playground",
 ]
 
 [tool.uv]
