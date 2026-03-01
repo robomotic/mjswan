@@ -45,7 +45,14 @@ jobs:
       run: uv sync --extra examples
 
     - name: Build demo application
-      run: MJSWAN_BASE_PATH="/mjswan/" MJSWAN_NO_LAUNCH=1 uv run python examples/demo/main.py
+      run: |
+        (while true; do echo "$(date '+%H:%M:%S') disk: $(df -h / | awk 'NR==2{print $3 "/" $2 " (" $5 " used)"}')"; sleep 10; done) &
+        MONITOR=$!
+        PYTHONUNBUFFERED=1 MJSWAN_BASE_PATH="/mjswan/" MJSWAN_NO_LAUNCH=1 uv run python examples/demo/main.py
+        kill $MONITOR
+        echo "=== Dist size ==="
+        du -sh examples/demo/dist
+        du -sh examples/demo/dist/*/ 2>/dev/null | sort -rh | head -20
 
     - name: Deploy to gh-pages branch
       uses: peaceiris/actions-gh-pages@v4
