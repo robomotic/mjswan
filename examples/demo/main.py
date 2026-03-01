@@ -282,9 +282,6 @@ def main():
     app = builder.build()
     if os.getenv("MJSWAN_NO_LAUNCH") != "1":
         app.launch()
-    else:
-        # Force exit to prevent imported libraries　from hanging the process on non-daemon thread cleanup.
-        os._exit(0)
 
 
 if __name__ == "__main__":

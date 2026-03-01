@@ -22,17 +22,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Free disk space
-      uses: jlumbroso/free-disk-space@main
-      with:
-        tool-cache: false
-        android: true
-        dotnet: true
-        haskell: true
-        large-packages: true
-        docker-images: true
-        swap-storage: false
-
     - name: Checkout repository
       uses: actions/checkout@v4
 
@@ -46,13 +35,9 @@ jobs:
 
     - name: Build demo application
       run: |
-        (while true; do echo "$(date '+%H:%M:%S') disk: $(df -h / | awk 'NR==2{print $3 "/" $2 " (" $5 " used)"}') mem: $(free -h | awk '/^Mem/{print $3 "/" $2}')"; sleep 5; done) &
-        MONITOR=$!
-        PYTHONUNBUFFERED=1 MJSWAN_BASE_PATH="/mjswan/" MJSWAN_NO_LAUNCH=1 uv run python examples/demo/main.py
-        kill $MONITOR
+        MJSWAN_BASE_PATH="/mjswan/" MJSWAN_NO_LAUNCH=1 uv run python examples/demo/main.py
         echo "=== Dist size ==="
-        du -sh examples/demo/dist
-        du -sh examples/demo/dist/*/ 2>/dev/null | sort -rh | head -20
+        du -h -d 1 examples/demo/dist 2>/dev/null | sort -rh | head -20
 
     - name: Deploy to gh-pages branch
       uses: peaceiris/actions-gh-pages@v4
