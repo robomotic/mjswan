@@ -29,7 +29,6 @@ You can also embed mjswan visualizations directly in Google Colab notebooks.
 
 ```python
 import os
-os.environ["MJSWAN_NO_LAUNCH"] = "1"
 
 import mujoco
 import mjswan

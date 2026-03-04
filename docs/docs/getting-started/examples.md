@@ -200,7 +200,6 @@ scene.add_splat(
 
 ```python
 import os
-os.environ["MJSWAN_NO_LAUNCH"] = "1"
 
 app = builder.build()
 # dist/ is ready; app.launch() is not called

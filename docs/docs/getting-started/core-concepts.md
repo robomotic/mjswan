@@ -201,4 +201,3 @@ The result is a fully static site: copy `dist/` to any static host (GitHub Pages
 | Variable | Effect |
 |---|---|
 | `MJSWAN_BASE_PATH` | Overrides `base_path` at build time (e.g. in CI pipelines) |
-| `MJSWAN_NO_LAUNCH` | Set to `"1"` to suppress `app.launch()` opening a browser — useful in headless or Colab environments |

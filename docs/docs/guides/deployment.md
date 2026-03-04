@@ -85,7 +85,6 @@ For CI builds, set the build command and publish directory:
 |---|---|
 | Build command | `python build.py` |
 | Publish directory | `dist` |
-| Environment variable | `MJSWAN_NO_LAUNCH=1` |
 
 No `base_path` change is needed when deploying to a Netlify root domain.
 
