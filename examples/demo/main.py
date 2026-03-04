@@ -277,10 +277,13 @@ def main():
     Environment variables:
         MJSWAN_BASE_PATH: Base path for deployment (default: '/')
         MJSWAN_NO_LAUNCH: Set to '1' to skip launching the browser
+        MJSWAN_SKIP_BUILD: Set to '1' to skip build and launch the pre-built app
     """
-    builder = setup_builder()
-    # Build and launch the application
-    app = builder.build()
+    if os.getenv("MJSWAN_SKIP_BUILD") == "1":
+        app = mjswan.mjswanApp(Path(__file__).resolve().parent / "dist")
+    else:
+        builder = setup_builder()
+        app = builder.build()
     if os.getenv("MJSWAN_NO_LAUNCH") != "1":
         app.launch()
 
