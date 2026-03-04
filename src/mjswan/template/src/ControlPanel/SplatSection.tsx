@@ -1,78 +1,66 @@
-import { useCallback, useState } from 'react';
-import { Box, Button, Slider, Stack, Text, TextInput } from '@mantine/core';
+import { useEffect, useState } from 'react';
+import { Box, Slider, Text } from '@mantine/core';
 import { CommandSection } from './CommandSection';
 
 interface SplatSectionProps {
-  onLoad?: (url: string, scale: number, groundOffset: number) => void;
-  onClear?: () => void;
-  loaded?: boolean;
+  /** Initial scale value from config. */
+  scale: number;
+  /** Initial ground offset value from config. */
+  groundOffset: number;
+  /** Called whenever scale or ground offset is adjusted. */
+  onCalibrate: (scale: number, groundOffset: number) => void;
 }
 
-export function SplatSection({ onLoad, onClear, loaded = false }: SplatSectionProps) {
-  const [url, setUrl] = useState('');
-  const [scale, setScale] = useState(1.0);
-  const [groundOffset, setGroundOffset] = useState(0.0);
+/** Dev-mode calibration controls for a Gaussian Splat background. */
+export function SplatSection({ scale: initialScale, groundOffset: initialGroundOffset, onCalibrate }: SplatSectionProps) {
+  const [scale, setScale] = useState(initialScale);
+  const [groundOffset, setGroundOffset] = useState(initialGroundOffset);
 
-  const handleLoad = useCallback(() => {
-    if (url.trim()) onLoad?.(url.trim(), scale, groundOffset);
-  }, [url, scale, groundOffset, onLoad]);
+  // Sync when the config changes (e.g. switching scenes)
+  useEffect(() => { setScale(initialScale); }, [initialScale]);
+  useEffect(() => { setGroundOffset(initialGroundOffset); }, [initialGroundOffset]);
+
+  const handleScaleChange = (val: number) => {
+    setScale(val);
+    onCalibrate(val, groundOffset);
+  };
+
+  const handleGroundOffsetChange = (val: number) => {
+    setGroundOffset(val);
+    onCalibrate(scale, val);
+  };
 
   return (
-    <CommandSection label="Splat" expandByDefault={false}>
+    <CommandSection label="Splat (dev)" expandByDefault={true}>
       <Box px="xs" pb="xs">
-        <TextInput
-          placeholder="https://...scene.spz"
-          value={url}
-          onChange={(e) => setUrl(e.currentTarget.value)}
-          size="xs"
-          radius="xs"
-          styles={{ input: { minHeight: '1.625rem', height: '1.625rem', padding: '0.5em', fontSize: '0.75em' } }}
-          mb="xs"
-        />
         <Box pb="xs">
           <Text c="dimmed" style={{ fontSize: '0.8em', marginBottom: '0.25em' }}>
-            Scale: {scale.toFixed(2)}
+            Scale: {scale.toFixed(3)}
           </Text>
           <Slider
             value={scale}
-            onChange={setScale}
+            onChange={handleScaleChange}
             min={0.1}
             max={5.0}
-            step={0.01}
+            step={0.001}
             size="xs"
             styles={{ root: { padding: '0' }, track: { height: 4 }, thumb: { width: 12, height: 12 } }}
           />
         </Box>
         <Box pb="xs">
           <Text c="dimmed" style={{ fontSize: '0.8em', marginBottom: '0.25em' }}>
-            Ground offset: {groundOffset.toFixed(2)}
+            Ground offset: {groundOffset.toFixed(3)}
           </Text>
           <Slider
             value={groundOffset}
-            onChange={setGroundOffset}
-            min={-3.0}
-            max={3.0}
-            step={0.01}
+            onChange={handleGroundOffsetChange}
+            min={-5.0}
+            max={5.0}
+            step={0.001}
             size="xs"
             styles={{ root: { padding: '0' }, track: { height: 4 }, thumb: { width: 12, height: 12 } }}
           />
         </Box>
-        <Stack gap="xs">
-          <Button
-            variant="light"
-            size="xs"
-            fullWidth
-            disabled={!url.trim()}
-            onClick={handleLoad}
-          >
-            Load Splat
-          </Button>
-          {loaded && (
-            <Button variant="subtle" color="gray" size="xs" fullWidth onClick={onClear}>
-              Clear
-            </Button>
-          )}
-        </Stack>
       </Box>
     </CommandSection>
   );

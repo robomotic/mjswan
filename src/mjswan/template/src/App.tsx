@@ -216,7 +216,7 @@ function AppContent() {
   const [currentScene, setCurrentScene] = useState<SceneConfig | null>(null);
   const [selectedPolicy, setSelectedPolicy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [splatLoaded, setSplatLoaded] = useState(false);
+  const [splatVisible, setSplatVisible] = useState(true);
   const runtimeRef = useRef<mjswanRuntime | null>(null);
   const { showLoading, hideLoading } = useLoading();
 
@@ -315,23 +315,26 @@ function AppContent() {
     hideLoading();
   }, [hideLoading]);
 
+  // Reset splat visibility when switching scenes
   useEffect(() => {
-    setSplatLoaded(false);
+    setSplatVisible(true);
   }, [scenePath]);
 
   const handleRuntimeReady = useCallback((runtime: mjswanRuntime) => {
     runtimeRef.current = runtime;
   }, []);
 
-  const handleLoadSplat = useCallback((url: string, scale: number, groundOffset: number) => {
-    runtimeRef.current?.setSplat({ url, scale, groundOffset });
-    setSplatLoaded(true);
+  const handleToggleSplat = useCallback((visible: boolean) => {
+    runtimeRef.current?.setSplatVisible(visible);
+    setSplatVisible(visible);
   }, []);
 
-  const handleClearSplat = useCallback(() => {
-    runtimeRef.current?.setSplat(null);
-    setSplatLoaded(false);
-  }, []);
+  const handleCalibrateSplat = useCallback((scale: number, groundOffset: number) => {
+    const splat = currentScene?.splat;
+    if (splat) {
+      runtimeRef.current?.setSplat({ ...splat, scale, groundOffset });
+    }
+  }, [currentScene?.splat]);
 
   const handleProjectChange = useCallback(
     (value: string | null) => {
@@ -416,9 +419,10 @@ function AppContent() {
           policyValue={selectedPolicy}
           onPolicyChange={handlePolicyChange}
           commandsEnabled={!!policyConfigPath}
-          onLoadSplat={handleLoadSplat}
-          onClearSplat={handleClearSplat}
-          splatLoaded={splatLoaded}
+          splatConfig={currentScene.splat ?? null}
+          splatVisible={splatVisible}
+          onToggleSplat={handleToggleSplat}
+          onCalibrateSplat={handleCalibrateSplat}
         />
         <MjswanViewer
           scenePath={scenePath}

@@ -34,6 +34,12 @@ class SplatConfig:
     collider_url: str | None = None
     """Optional URL or local path to a .glb collider mesh."""
 
+    dev: bool = False
+    """Expose calibration controls (scale, offset) in the viewer UI."""
+
+    metadata: dict[str, Any] = field(default_factory=dict)
+    """Additional metadata for the splat."""
+
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
             "url": self.url,
@@ -42,7 +48,56 @@ class SplatConfig:
         }
         if self.collider_url is not None:
             d["colliderUrl"] = self.collider_url
+        if self.dev:
+            d["dev"] = True
         return d
+
+
+class SplatHandle:
+    """Handle for configuring a Gaussian Splat scene background.
+
+    This class provides a fluent API for configuring a splat after it has been
+    added to a scene, mirroring the pattern used by PolicyHandle.
+
+    Example:
+        splat = scene.add_splat(
+            "https://cdn.example.com/scene.spz",
+            scale=1.35,
+            ground_offset=1.0,
+        )
+    """
+
+    def __init__(self, splat_config: SplatConfig, scene: SceneHandle) -> None:
+        self._config = splat_config
+        self._scene = scene
+
+    @property
+    def url(self) -> str:
+        """URL or local path to the .spz splat file."""
+        return self._config.url
+
+    @property
+    def scale(self) -> float:
+        """Metric scale factor."""
+        return self._config.scale
+
+    @property
+    def ground_offset(self) -> float:
+        """Ground plane offset."""
+        return self._config.ground_offset
+
+    def set_metadata(self, key: str, value: Any) -> SplatHandle:
+        """Set metadata for this splat.
+
+        Args:
+            key: Metadata key.
+            value: Metadata value.
+
+        Returns:
+            Self for method chaining.
+        """
+        self._config.metadata[key] = value
+        return self
 
 
 @dataclass
@@ -131,6 +186,50 @@ class SceneHandle:
         self._config.policies.append(policy_config)
         return PolicyHandle(policy_config, self)
 
+    def add_splat(
+        self,
+        url: str,
+        *,
+        scale: float = 1.0,
+        ground_offset: float = 0.0,
+        collider_url: str | None = None,
+        dev: bool = False,
+    ) -> SplatHandle:
+        """Add a Gaussian Splat background to this scene.
+
+        The splat is baked into the app's config during build() and loaded
+        automatically when the scene is opened in the viewer.
+
+        Args:
+            url: URL or local path to the .spz splat file.
+            scale: Metric scale factor. Use ``metric_scale_factor`` from your
+                capture metadata if available.
+            ground_offset: Ground plane offset in the splat's coordinate system.
+                Use ``ground_plane_offset`` from your capture metadata if available.
+            collider_url: Optional URL or local path to a .glb collision mesh.
+            dev: If True, exposes scale and ground offset controls in the viewer
+                control panel for interactive calibration. Defaults to False.
+
+        Returns:
+            SplatHandle for further configuration.
+
+        Example:
+            scene.add_splat(
+                "https://cdn.example.com/background.spz",
+                scale=1.35,
+                ground_offset=1.0,
+            )
+        """
+        splat_config = SplatConfig(
+            url=url,
+            scale=scale,
+            ground_offset=ground_offset,
+            collider_url=collider_url,
+            dev=dev,
+        )
+        self._config.splat = splat_config
+        return SplatHandle(splat_config, self)
+
     def set_metadata(self, key: str, value: Any) -> SceneHandle:
         """Set metadata for this scene.
 
@@ -144,32 +243,5 @@ class SceneHandle:
         self._config.metadata[key] = value
         return self
 
-    def set_splat(
-        self,
-        url: str,
-        *,
-        scale: float = 1.0,
-        ground_offset: float = 0.0,
-        collider_url: str | None = None,
-    ) -> SceneHandle:
-        """Set a Gaussian Splat background for this scene.
 
-        Args:
-            url: URL or local path to the .spz splat file.
-            scale: Metric scale factor (metric_scale_factor from world.json).
-            ground_offset: Ground plane offset (ground_plane_offset from world.json).
-            collider_url: Optional URL or local path to a .glb collider mesh.
-
-        Returns:
-            Self for method chaining.
-        """
-        self._config.splat = SplatConfig(
-            url=url,
-            scale=scale,
-            ground_offset=ground_offset,
-            collider_url=collider_url,
-        )
-        return self
-
-
-__all__ = ["SplatConfig", "SceneConfig", "SceneHandle"]
+__all__ = ["SplatConfig", "SplatHandle", "SceneConfig", "SceneHandle"]

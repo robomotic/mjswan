@@ -377,6 +377,12 @@ export class mjswanRuntime {
     }
   }
 
+  setSplatVisible(visible: boolean): void {
+    if (this.splatMesh) {
+      this.splatMesh.visible = visible;
+    }
+  }
+
   async stop(): Promise<void> {
     this.running = false;
     const pending = this.loopPromise;

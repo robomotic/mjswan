@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Anchor, Box, Button, Divider, Image, Menu, Modal, Select, Slider, Stack, Text, Tooltip } from '@mantine/core';
+import { ActionIcon, Anchor, Box, Button, Divider, Flex, Image, Menu, Modal, Select, Slider, Stack, Text, Tooltip } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconChevronDown, IconRefresh } from '@tabler/icons-react';
+import { IconChevronDown, IconEye, IconEyeOff, IconRefresh } from '@tabler/icons-react';
+import type { SplatConfig } from '../core/scene/splat';
 import { MJSWAN_VERSION, GITHUB_CONTRIBUTORS, type Contributor } from '../Version';
 import FloatingPanel from './FloatingPanel';
 import { LabeledInput } from './LabeledInput';
@@ -33,10 +34,14 @@ interface ControlPanelProps {
   commandsEnabled?: boolean;
   /** Callback when reset button is pressed */
   onReset?: () => void;
-  /** Splat loading */
-  onLoadSplat?: (url: string, scale: number, groundOffset: number) => void;
-  onClearSplat?: () => void;
-  splatLoaded?: boolean;
+  /** Splat config from the current scene (null if no splat). */
+  splatConfig?: SplatConfig | null;
+  /** Whether the splat is currently visible. */
+  splatVisible?: boolean;
+  /** Toggle splat visibility. */
+  onToggleSplat?: (visible: boolean) => void;
+  /** Dev-mode: update splat calibration (scale, ground offset) live. */
+  onCalibrateSplat?: (scale: number, groundOffset: number) => void;
 }
 
 /**
@@ -121,9 +126,10 @@ function ControlPanel(props: ControlPanelProps) {
     onPolicyChange,
     commandsEnabled = false,
     onReset,
-    onLoadSplat,
-    onClearSplat,
-    splatLoaded = false,
+    splatConfig,
+    splatVisible = true,
+    onToggleSplat,
+    onCalibrateSplat,
   } = props;
 
   const [aboutModalOpened, { open: openAbout, close: closeAbout }] = useDisclosure(false);
@@ -373,7 +379,38 @@ function ControlPanel(props: ControlPanelProps) {
             </>
           )}
 
-          <SplatSection onLoad={onLoadSplat} onClear={onClearSplat} loaded={splatLoaded} />
+          {/* Splat toggle — visible whenever the scene has a splat */}
+          {splatConfig && (
+            <Box pb="0.5em" px="xs">
+              <Flex align="center" justify="space-between">
+                <Text
+                  c="dimmed"
+                  style={{ fontSize: '0.875em', fontWeight: 450, letterSpacing: '-0.75px' }}
+                >
+                  Background
+                </Text>
+                <Tooltip label={splatVisible ? 'Hide background' : 'Show background'} position="left">
+                  <ActionIcon
+                    variant="subtle"
+                    size="sm"
+                    color={splatVisible ? 'blue' : 'gray'}
+                    onClick={() => onToggleSplat?.(!splatVisible)}
+                  >
+                    {splatVisible ? <IconEye size={14} /> : <IconEyeOff size={14} />}
+                  </ActionIcon>
+                </Tooltip>
+              </Flex>
+            </Box>
+          )}
+
+          {/* Dev-mode calibration controls — only when splat.dev === true */}
+          {splatConfig?.dev && onCalibrateSplat && (
+            <SplatSection
+              scale={splatConfig.scale ?? 1.0}
+              groundOffset={splatConfig.groundOffset ?? 0.0}
+              onCalibrate={onCalibrateSplat}
+            />
+          )}
 
           {/* Reset Button - always at bottom */}
           <Divider my="xs" mx="xs" />
