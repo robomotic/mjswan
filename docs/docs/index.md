@@ -46,13 +46,13 @@ mjswan is a powerful framework for creating interactive MuJoCo simulations with 
 
     ---
 
-    Works seamlessly on desktop and mobile devices
+    Works seamlessly on desktop, mobile, and VR devices
 
--   :material-virtual-reality:{ .lg .middle } __VR Support__
+-   :material-code-tags:{ .lg .middle } __Portable__
 
     ---
 
-    Native VR viewer support with WebXR API
+    Embed the simulation in any web page or Google Colab notebook output cell
 
 </div>
 

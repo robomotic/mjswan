@@ -44,6 +44,7 @@
 - **VR Support**: Native VR viewer support with WebXR.
 - **Client-only**: All computation runs in the browser. No server for simulation is required.
 - **Easy Sharing**: Host as a static site for effortless demo distribution (e.g., GitHub Pages).
+- **Portable**: Embed the simulation in a web page or Google Colab notebook.
 - **Customizable**: Visualize your mujoco models and onnx policies quickly.
 
 
