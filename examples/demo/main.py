@@ -271,6 +271,52 @@ def setup_builder() -> mjswan.Builder:
     return builder
 
 
+def _copy_licenses(output_dir: Path) -> None:
+    """Copy LICENSE and NOTICE files into the built output.
+
+    - robot_descriptions (menagerie): copies per scene from each repo's REPOSITORY_PATH.
+    - myosuite / mujoco_playground: copies to the project root from the dist-info licenses/.
+    """
+    import importlib.metadata
+    import shutil
+    from importlib import import_module
+
+    # Per-scene for robot_descriptions (menagerie project)
+    menagerie_assets = output_dir / "menagerie" / "assets"
+    if menagerie_assets.exists():
+        for module, desc in DESCRIPTIONS.items():
+            if not desc.has_mjcf:
+                continue
+            scene_id = module.replace("_mj_description", "")
+            scene_dir = menagerie_assets / scene_id
+            if not scene_dir.exists():
+                continue
+            mod = import_module(f"robot_descriptions.{module}")
+            if not hasattr(mod, "REPOSITORY_PATH"):
+                continue
+            for fname in ["LICENSE", "NOTICE"]:
+                src = Path(mod.REPOSITORY_PATH) / fname
+                if src.exists():
+                    shutil.copy2(src, scene_dir / fname)
+
+    # Project-level for myosuite and mujoco_playground
+    for project_id, pkg_name in [
+        ("myosuite", "myosuite"),
+        ("playground", "mujoco_playground"),
+    ]:
+        project_dir = output_dir / project_id
+        if not project_dir.exists():
+            continue
+        try:
+            dist = importlib.metadata.Distribution.from_name(pkg_name)
+        except importlib.metadata.PackageNotFoundError:
+            continue
+        for fname in ["LICENSE", "NOTICE"]:
+            src = Path(str(dist.locate_file(f"licenses/{fname}")))
+            if src.exists():
+                shutil.copy2(src, project_dir / fname)
+
+
 def main():
     """Main entry point for the demo application.
 
@@ -279,11 +325,13 @@ def main():
         MJSWAN_NO_LAUNCH: Set to '1' to skip launching the browser
         MJSWAN_SKIP_BUILD: Set to '1' to skip build and launch the pre-built app
     """
+    dist_dir = Path(__file__).resolve().parent / "dist"
     if os.getenv("MJSWAN_SKIP_BUILD") == "1":
-        app = mjswan.mjswanApp(Path(__file__).resolve().parent / "dist")
+        app = mjswan.mjswanApp(dist_dir)
     else:
         builder = setup_builder()
         app = builder.build()
+        _copy_licenses(dist_dir)
     if os.getenv("MJSWAN_NO_LAUNCH") != "1":
         app.launch()
 
