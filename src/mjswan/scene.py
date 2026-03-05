@@ -114,6 +114,9 @@ class SceneHandle:
         x_offset: float = 0.0,
         y_offset: float = 0.0,
         z_offset: float = 0.0,
+        roll: float = 0.0,
+        pitch: float = 0.0,
+        yaw: float = 0.0,
         collider_url: str | None = None,
         control: bool = False,
     ) -> SplatHandle:
@@ -131,6 +134,12 @@ class SceneHandle:
             y_offset: Y-axis position offset (in scaled splat units).
             z_offset: Vertical position offset. Use ``ground_plane_offset`` from
                 your capture metadata if available.
+            roll: Roll rotation in degrees applied on top of the COLMAP→Three.js
+                base rotation.
+            pitch: Pitch rotation in degrees applied on top of the COLMAP→Three.js
+                base rotation.
+            yaw: Yaw rotation in degrees applied on top of the COLMAP→Three.js
+                base rotation.
             collider_url: Optional URL or local path to a .glb collision mesh.
             control: If True, shows scale and offset controls in the viewer
                 control panel. Defaults to False.
@@ -153,6 +162,9 @@ class SceneHandle:
             x_offset=x_offset,
             y_offset=y_offset,
             z_offset=z_offset,
+            roll=roll,
+            pitch=pitch,
+            yaw=yaw,
             collider_url=collider_url,
             control=control,
         )

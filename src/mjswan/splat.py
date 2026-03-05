@@ -31,6 +31,15 @@ class SplatConfig:
     z_offset: float = 0.0
     """Z-axis position offset (vertical). Use ``ground_plane_offset`` from capture metadata if available."""
 
+    roll: float = 0.0
+    """Roll rotation in degrees applied on top of the COLMAP→Three.js base rotation."""
+
+    pitch: float = 0.0
+    """Pitch rotation in degrees applied on top of the COLMAP→Three.js base rotation."""
+
+    yaw: float = 0.0
+    """Yaw rotation in degrees applied on top of the COLMAP→Three.js base rotation."""
+
     collider_url: str | None = None
     """Optional URL or local path to a .glb collider mesh."""
 
@@ -49,6 +58,12 @@ class SplatConfig:
             "yOffset": self.y_offset,
             "zOffset": self.z_offset,
         }
+        if self.roll != 0.0:
+            d["roll"] = self.roll
+        if self.pitch != 0.0:
+            d["pitch"] = self.pitch
+        if self.yaw != 0.0:
+            d["yaw"] = self.yaw
         if self.collider_url is not None:
             d["colliderUrl"] = self.collider_url
         if self.control:
@@ -98,6 +113,21 @@ class SplatHandle:
     def z_offset(self) -> float:
         """Z-axis position offset (vertical)."""
         return self._config.z_offset
+
+    @property
+    def roll(self) -> float:
+        """Roll rotation in degrees."""
+        return self._config.roll
+
+    @property
+    def pitch(self) -> float:
+        """Pitch rotation in degrees."""
+        return self._config.pitch
+
+    @property
+    def yaw(self) -> float:
+        """Yaw rotation in degrees."""
+        return self._config.yaw
 
     def set_metadata(self, key: str, value: Any) -> SplatHandle:
         """Set metadata for this splat.

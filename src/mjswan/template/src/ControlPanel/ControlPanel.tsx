@@ -32,8 +32,8 @@ interface ControlPanelProps {
   onSplatChange: (value: string | null) => void;
   /** Splat config from the current scene (null if no splat), used for dev-mode calibration. */
   splatConfig?: SplatConfig | null;
-  /** Dev-mode: update splat calibration (scale, x/y/z offsets) live. */
-  onCalibrateSplat?: (scale: number, xOffset: number, yOffset: number, zOffset: number) => void;
+  /** Dev-mode: update splat calibration (scale, x/y/z offsets, roll/pitch/yaw) live. */
+  onCalibrateSplat?: (scale: number, xOffset: number, yOffset: number, zOffset: number, roll: number, pitch: number, yaw: number) => void;
   policies: SelectOption[];
   policyValue: string | null;
   onPolicyChange: (value: string | null) => void;
@@ -357,6 +357,9 @@ function ControlPanel(props: ControlPanelProps) {
               xOffset={splatConfig.xOffset ?? 0.0}
               yOffset={splatConfig.yOffset ?? 0.0}
               zOffset={splatConfig.zOffset ?? 0.0}
+              roll={splatConfig.roll ?? 0.0}
+              pitch={splatConfig.pitch ?? 0.0}
+              yaw={splatConfig.yaw ?? 0.0}
               onCalibrate={onCalibrateSplat}
             />
           )}

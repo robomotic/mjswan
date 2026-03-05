@@ -334,10 +334,10 @@ function AppContent() {
     setSelectedSplat(value);
   }, []);
 
-  const handleCalibrateSplat = useCallback((scale: number, xOffset: number, yOffset: number, zOffset: number) => {
+  const handleCalibrateSplat = useCallback((scale: number, xOffset: number, yOffset: number, zOffset: number, roll: number, pitch: number, yaw: number) => {
     const splat = currentScene?.splat;
     if (splat) {
-      runtimeRef.current?.setSplat({ ...splat, scale, xOffset, yOffset, zOffset });
+      runtimeRef.current?.setSplat({ ...splat, scale, xOffset, yOffset, zOffset, roll, pitch, yaw });
     }
   }, [currentScene?.splat]);
 
