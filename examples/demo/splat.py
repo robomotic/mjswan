@@ -56,7 +56,7 @@ def setup_builder() -> mjswan.Builder:
         "Street",
         SPLAT_URL,
         scale=3.275,
-        ground_offset=0.708,
+        z_offset=0.708,
         control=True,
     )
 

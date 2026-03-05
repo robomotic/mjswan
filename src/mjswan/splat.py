@@ -22,14 +22,20 @@ class SplatConfig:
     scale: float = 1.0
     """Metric scale factor (converts splat units to meters)."""
 
-    ground_offset: float = 0.0
-    """Ground plane offset in the splat's coordinate system."""
+    x_offset: float = 0.0
+    """X-axis position offset (in scaled splat units)."""
+
+    y_offset: float = 0.0
+    """Y-axis position offset (in scaled splat units)."""
+
+    z_offset: float = 0.0
+    """Z-axis position offset (vertical). Use ``ground_plane_offset`` from capture metadata if available."""
 
     collider_url: str | None = None
     """Optional URL or local path to a .glb collider mesh."""
 
     control: bool = False
-    """Show scale and ground offset controls in the viewer control panel."""
+    """Show scale and offset controls in the viewer control panel."""
 
     metadata: dict[str, Any] = field(default_factory=dict)
     """Additional metadata for the splat."""
@@ -39,7 +45,9 @@ class SplatConfig:
             "name": self.name,
             "url": self.url,
             "scale": self.scale,
-            "groundOffset": self.ground_offset,
+            "xOffset": self.x_offset,
+            "yOffset": self.y_offset,
+            "zOffset": self.z_offset,
         }
         if self.collider_url is not None:
             d["colliderUrl"] = self.collider_url
@@ -77,9 +85,19 @@ class SplatHandle:
         return self._config.scale
 
     @property
-    def ground_offset(self) -> float:
-        """Ground plane offset."""
-        return self._config.ground_offset
+    def x_offset(self) -> float:
+        """X-axis position offset."""
+        return self._config.x_offset
+
+    @property
+    def y_offset(self) -> float:
+        """Y-axis position offset."""
+        return self._config.y_offset
+
+    @property
+    def z_offset(self) -> float:
+        """Z-axis position offset (vertical)."""
+        return self._config.z_offset
 
     def set_metadata(self, key: str, value: Any) -> SplatHandle:
         """Set metadata for this splat.

@@ -111,7 +111,9 @@ class SceneHandle:
         url: str,
         *,
         scale: float = 1.0,
-        ground_offset: float = 0.0,
+        x_offset: float = 0.0,
+        y_offset: float = 0.0,
+        z_offset: float = 0.0,
         collider_url: str | None = None,
         control: bool = False,
     ) -> SplatHandle:
@@ -125,10 +127,12 @@ class SceneHandle:
             url: URL or local path to the .spz splat file.
             scale: Metric scale factor. Use ``metric_scale_factor`` from your
                 capture metadata if available.
-            ground_offset: Ground plane offset in the splat's coordinate system.
-                Use ``ground_plane_offset`` from your capture metadata if available.
+            x_offset: X-axis position offset (in scaled splat units).
+            y_offset: Y-axis position offset (in scaled splat units).
+            z_offset: Vertical position offset. Use ``ground_plane_offset`` from
+                your capture metadata if available.
             collider_url: Optional URL or local path to a .glb collision mesh.
-            control: If True, shows scale and ground offset controls in the viewer
+            control: If True, shows scale and offset controls in the viewer
                 control panel. Defaults to False.
 
         Returns:
@@ -139,14 +143,16 @@ class SceneHandle:
                 "Outdoor",
                 "https://cdn.example.com/background.spz",
                 scale=1.35,
-                ground_offset=1.0,
+                z_offset=1.0,
             )
         """
         splat_config = SplatConfig(
             name=name,
             url=url,
             scale=scale,
-            ground_offset=ground_offset,
+            x_offset=x_offset,
+            y_offset=y_offset,
+            z_offset=z_offset,
             collider_url=collider_url,
             control=control,
         )

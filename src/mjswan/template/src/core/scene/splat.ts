@@ -6,9 +6,11 @@ export interface SplatConfig {
   name: string;
   url: string;
   scale?: number;
-  groundOffset?: number;
+  xOffset?: number;
+  yOffset?: number;
+  zOffset?: number;
   colliderUrl?: string;
-  /** If true, shows scale and ground offset controls in the viewer control panel. */
+  /** If true, shows scale and offset controls in the viewer control panel. */
   control?: boolean;
 }
 
@@ -16,7 +18,9 @@ export function loadSplat(config: SplatConfig, scene: THREE.Scene): SplatMesh {
   const splat = new SplatMesh({ url: config.url });
 
   const scale = config.scale ?? 1.0;
-  const groundOffset = config.groundOffset ?? 0.0;
+  const xOffset = config.xOffset ?? 0.0;
+  const yOffset = config.yOffset ?? 0.0;
+  const zOffset = config.zOffset ?? 0.0;
 
   splat.scale.setScalar(scale);
 
@@ -24,8 +28,7 @@ export function loadSplat(config: SplatConfig, scene: THREE.Scene): SplatMesh {
   // Rotating 180° around X flips to Three.js convention (Y-up, Z-towards-viewer).
   splat.rotation.x = Math.PI;
 
-  // After the flip, shift up to align ground with Y = 0.
-  splat.position.y = groundOffset * scale;
+  splat.position.set(xOffset * scale, zOffset * scale, yOffset * scale);
 
   scene.add(splat);
   return splat;
