@@ -413,7 +413,7 @@ function ControlPanel(props: ControlPanelProps) {
           )}
 
           {/* Reset Button - always at bottom */}
-          <Divider my="xs" mx="xs" />
+          <Divider mb="xs" mx="xs" />
           <Box px="xs" pb="xs">
             <Button
               variant="light"

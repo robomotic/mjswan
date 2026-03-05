@@ -32,12 +32,12 @@ def setup_builder() -> mjswan.Builder:
     )
 
     demo_project.add_scene(
-        spec=mujoco.MjSpec.from_file("assets/scene/mjswan/unitree_g1/scene.xml"),
+        spec=mujoco.MjSpec.from_file("assets/unitree_g1/scene.xml"),
         name="G1",
     ).add_policy(
-        policy=onnx.load("assets/policy/unitree_g1/locomotion.onnx"),
+        policy=onnx.load("assets/unitree_g1/locomotion.onnx"),
         name="Locomotion",
-        config_path="assets/policy/unitree_g1/locomotion.json",
+        config_path="assets/unitree_g1/locomotion.json",
     ).add_velocity_command(
         lin_vel_x=(-2.0, 2.0),
         lin_vel_y=(-0.5, 0.5),
@@ -45,7 +45,7 @@ def setup_builder() -> mjswan.Builder:
         default_lin_vel_y=0.0,
     )
     demo_project.add_scene(
-        model=mujoco.MjModel.from_xml_path("assets/scene/mjswan/unitree_go2/scene.xml"),
+        model=mujoco.MjModel.from_xml_path("assets/unitree_go2/scene.xml"),
         name="Go2",
     )
 
