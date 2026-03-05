@@ -3,6 +3,7 @@ import { SplatMesh } from '@sparkjsdev/spark';
 export type { SplatMesh };
 
 export interface SplatConfig {
+  name: string;
   url: string;
   scale?: number;
   groundOffset?: number;

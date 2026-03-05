@@ -13,6 +13,9 @@ if TYPE_CHECKING:
 class SplatConfig:
     """Configuration for a Gaussian Splat scene background."""
 
+    name: str
+    """Display name shown in the viewer control panel."""
+
     url: str
     """URL or local path to the .spz splat file."""
 
@@ -33,6 +36,7 @@ class SplatConfig:
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
+            "name": self.name,
             "url": self.url,
             "scale": self.scale,
             "groundOffset": self.ground_offset,

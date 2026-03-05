@@ -33,12 +33,18 @@ def setup_builder() -> mjswan.Builder:
 
     scene = project.add_scene(
         spec=mujoco.MjSpec.from_file("assets/unitree_g1/scene.xml"),
-        name="G1 — Street",
+        name="G1",
     )
 
     scene.add_policy(
-        policy=onnx.load("assets/unitree_g1/locomotion.onnx"),
+        name="balance",
+        policy=onnx.load("assets/unitree_g1/balance.onnx"),
+        config_path="assets/unitree_g1/balance.json",
+    )
+
+    scene.add_policy(
         name="locomotion",
+        policy=onnx.load("assets/unitree_g1/locomotion.onnx"),
         config_path="assets/unitree_g1/locomotion.json",
     ).add_velocity_command(
         lin_vel_x=(-1.5, 1.5),
@@ -46,17 +52,8 @@ def setup_builder() -> mjswan.Builder:
         default_lin_vel_x=0.5,
     )
 
-    scene.add_policy(
-        policy=onnx.load("assets/unitree_g1/balance.onnx"),
-        name="balance",
-        config_path="assets/unitree_g1/balance.json",
-    ).add_velocity_command(
-        lin_vel_x=(-1.5, 1.5),
-        lin_vel_y=(-0.5, 0.5),
-        default_lin_vel_x=0.5,
-    )
-
     scene.add_splat(
+        "Street",
         SPLAT_URL,
         scale=3.275,
         ground_offset=0.708,

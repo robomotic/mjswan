@@ -326,7 +326,7 @@ function AppContent() {
 
   const splatOptions = useMemo(() => {
     if (!currentScene?.splat) return [] as { value: string; label: string }[];
-    return [{ value: 'splat', label: 'Background' }];
+    return [{ value: 'splat', label: currentScene.splat.name }];
   }, [currentScene?.splat]);
 
   const handleSplatChange = useCallback((value: string | null) => {

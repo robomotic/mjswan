@@ -107,6 +107,7 @@ class SceneHandle:
 
     def add_splat(
         self,
+        name: str,
         url: str,
         *,
         scale: float = 1.0,
@@ -120,6 +121,7 @@ class SceneHandle:
         automatically when the scene is opened in the viewer.
 
         Args:
+            name: Display name shown in the viewer control panel.
             url: URL or local path to the .spz splat file.
             scale: Metric scale factor. Use ``metric_scale_factor`` from your
                 capture metadata if available.
@@ -134,12 +136,14 @@ class SceneHandle:
 
         Example:
             scene.add_splat(
+                "Outdoor",
                 "https://cdn.example.com/background.spz",
                 scale=1.35,
                 ground_offset=1.0,
             )
         """
         splat_config = SplatConfig(
+            name=name,
             url=url,
             scale=scale,
             ground_offset=ground_offset,
