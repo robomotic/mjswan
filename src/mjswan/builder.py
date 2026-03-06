@@ -27,6 +27,8 @@ from . import __version__
 from ._build_client import ClientBuilder
 from .app import mjswanApp
 from .project import ProjectConfig, ProjectHandle
+from .scene import SceneConfig
+from .splat import SplatConfig
 from .utils import collect_spec_assets, name2id, to_zip_deflated
 
 
@@ -138,8 +140,22 @@ class Builder:
                     "scenes": [
                         {
                             "name": scene.name,
-                            # "path": scene.path,
                             "path": f"{name2id(scene.name)}/{scene.scene_filename}",
+                            **(
+                                {
+                                    "splats": [
+                                        self._build_splat_config_dict(scene, s)
+                                        for s in scene.splats
+                                    ]
+                                }
+                                if scene.splats
+                                else {}
+                            ),
+                            **(
+                                {"splatSection": True}
+                                if scene.splat_section and not scene.splats
+                                else {}
+                            ),
                             "policies": [
                                 (
                                     {
@@ -177,6 +193,18 @@ class Builder:
         with open(root_config_file, "w") as f:
             json.dump(root_config, f, indent=2)
 
+    def _build_splat_config_dict(self, scene: SceneConfig, splat: SplatConfig) -> dict:
+        """Build the splat dict for config.json.
+
+        When ``source`` is set the file is copied to the scene asset directory
+        during :meth:`_save_web`, and the resulting relative path is injected
+        here so the frontend can resolve it to a URL.
+        """
+        d = splat.to_dict()
+        if splat.source is not None:
+            d["path"] = f"{name2id(scene.name)}/{name2id(splat.name)}.spz"
+        return d
+
     def _policy_filename(self, name: str) -> str:
         if not name or name.strip() == "":
             raise ValueError("Policy name must be a non-empty string.")
@@ -206,7 +234,8 @@ class Builder:
                     └── <scene-id>/
                         ├── scene.mjz/.mjb
                         ├── <policy-id>.onnx
-                        └── <policy-id>.json
+                        ├── <policy-id>.json
+                        └── <splat-id>.spz  (when local source provided)
         """
         if output_path.exists():
             shutil.rmtree(output_path)
@@ -390,6 +419,25 @@ class Builder:
                             }
                             with open(target, "w") as f:
                                 json.dump(data, f, indent=2)
+
+                    # Copy bundled .spz files for each splat with source set
+                    for splat in scene.splats:
+                        if splat.source is not None:
+                            src = Path(splat.source).expanduser()
+                            if not src.is_absolute():
+                                src = (Path.cwd() / src).resolve()
+                            if src.exists():
+                                shutil.copy2(
+                                    str(src),
+                                    str(scene_dir / f"{name2id(splat.name)}.spz"),
+                                )
+                            else:
+                                warnings.warn(
+                                    f"Splat source file not found: {src}",
+                                    category=RuntimeWarning,
+                                    stacklevel=2,
+                                )
+
                     progress.advance(task)
 
         print(f"✓ Saved mjswan application to: {output_path}")

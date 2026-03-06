@@ -8,6 +8,8 @@ import {
   getQuaternion,
   loadSceneFromURL,
 } from '../scene/scene';
+import { type SplatConfig, type SplatMesh, loadSplat, disposeSplat, applySplatTransform } from '../scene/splat';
+import { loadCollider, disposeCollider } from '../scene/collider';
 import { DragStateManager } from '../utils/dragStateManager';
 import { createTendonState, updateTendonGeometry, updateTendonRendering } from '../scene/tendons';
 import { updateHeadlightFromCamera, updateLightsFromData } from '../scene/lights';
@@ -85,6 +87,8 @@ export class mjswanRuntime {
   private onnxInputDict: Record<string, ort.Tensor> | null;
   private onnxInferencing: boolean;
   private vrButton: HTMLElement | null;
+  private splatMesh: SplatMesh | null;
+  private colliderMesh: THREE.Group | null;
 
   constructor(mujoco: MainModule, container: HTMLElement, options: RuntimeOptions = {}) {
     this.mujoco = mujoco;
@@ -180,6 +184,8 @@ export class mjswanRuntime {
     this.onnxModule = null;
     this.onnxInputDict = null;
     this.onnxInferencing = false;
+    this.splatMesh = null;
+    this.colliderMesh = null;
 
     // Initialize cache system (singleton shared across runtime instances)
     this.sceneCacheManager = SceneCacheManager.getInstance(this.mujoco);
@@ -187,8 +193,22 @@ export class mjswanRuntime {
     this.memoryMonitor = new MemoryMonitor();
   }
 
-  async loadEnvironment(scenePath: string, policyConfigPath: string | null = null): Promise<void> {
+  async loadEnvironment(
+    scenePath: string,
+    policyConfigPath: string | null = null,
+    splatConfig: SplatConfig | null = null
+  ): Promise<void> {
     await this.stop();
+
+    // Dispose previous splat/collider before switching scenes
+    if (this.splatMesh) {
+      disposeSplat(this.splatMesh, this.scene);
+      this.splatMesh = null;
+    }
+    if (this.colliderMesh) {
+      disposeCollider(this.colliderMesh, this.scene);
+      this.colliderMesh = null;
+    }
 
     const startTime = performance.now();
 
@@ -223,6 +243,17 @@ export class mjswanRuntime {
 
       // Capture and cache resources
       await this.captureAndCacheResources(scenePath);
+    }
+
+    // Load splat and optional collider
+    if (splatConfig) {
+      this.splatMesh = loadSplat(splatConfig, this.scene);
+      if (splatConfig.colliderUrl) {
+        this.colliderMesh = await loadCollider(
+          this.resolveAssetUrl(splatConfig.colliderUrl),
+          this.scene
+        );
+      }
     }
 
     await this.loadPolicyConfig(policyConfigPath);
@@ -324,6 +355,39 @@ export class mjswanRuntime {
     this.running = true;
     this.loopPromise = this.mainLoop();
     return this.loopPromise;
+  }
+
+  async setSplat(config: SplatConfig | null): Promise<void> {
+    if (this.splatMesh) {
+      disposeSplat(this.splatMesh, this.scene);
+      this.splatMesh = null;
+    }
+    if (this.colliderMesh) {
+      disposeCollider(this.colliderMesh, this.scene);
+      this.colliderMesh = null;
+    }
+    if (config) {
+      this.splatMesh = loadSplat(config, this.scene);
+      if (config.colliderUrl) {
+        this.colliderMesh = await loadCollider(
+          this.resolveAssetUrl(config.colliderUrl),
+          this.scene
+        );
+      }
+    }
+  }
+
+  /** Update transform of the existing splat without disposing/reloading. */
+  calibrateSplat(config: SplatConfig): void {
+    if (this.splatMesh) {
+      applySplatTransform(this.splatMesh, config);
+    }
+  }
+
+  setSplatVisible(visible: boolean): void {
+    if (this.splatMesh) {
+      this.splatMesh.visible = visible;
+    }
   }
 
   async stop(): Promise<void> {

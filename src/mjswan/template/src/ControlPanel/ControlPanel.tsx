@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { Anchor, Box, Button, Divider, Image, Menu, Modal, Select, Slider, Stack, Text, Tooltip } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconChevronDown, IconRefresh } from '@tabler/icons-react';
+import type { SplatConfig } from '../core/scene/splat';
 import { MJSWAN_VERSION, GITHUB_CONTRIBUTORS, type Contributor } from '../Version';
 import FloatingPanel from './FloatingPanel';
 import { LabeledInput } from './LabeledInput';
 import { CommandSection } from './CommandSection';
+import { SplatSection } from './SplatSection';
 import {
   getCommandManager,
   type CommandDefinition,
@@ -25,6 +27,16 @@ interface ControlPanelProps {
   scenes: SelectOption[];
   sceneValue: string | null;
   onSceneChange: (value: string | null) => void;
+  splats: SelectOption[];
+  splatSection?: boolean;
+  splatValue: string | null;
+  onSplatChange: (value: string | null) => void;
+  /** Splat config from the current scene (null if no splat), used for dev-mode calibration. */
+  splatConfig?: SplatConfig | null;
+  /** Dev-mode: update splat calibration (scale, x/y/z offsets, roll/pitch/yaw) live. */
+  onCalibrateSplat?: (scale: number, xOffset: number, yOffset: number, zOffset: number, roll: number, pitch: number, yaw: number) => void;
+  /** Load a splat from an arbitrary .spz URL. Returns true on success, false on failure. */
+  onSplatUrlLoad?: (url: string) => Promise<boolean>;
   policies: SelectOption[];
   policyValue: string | null;
   onPolicyChange: (value: string | null) => void;
@@ -111,6 +123,13 @@ function ControlPanel(props: ControlPanelProps) {
     scenes,
     sceneValue,
     onSceneChange,
+    splats,
+    splatSection = false,
+    splatValue,
+    onSplatChange,
+    splatConfig,
+    onCalibrateSplat,
+    onSplatUrlLoad,
     policies,
     policyValue,
     onPolicyChange,
@@ -119,6 +138,26 @@ function ControlPanel(props: ControlPanelProps) {
   } = props;
 
   const [aboutModalOpened, { open: openAbout, close: closeAbout }] = useDisclosure(false);
+  const [splatSearchValue, setSplatSearchValue] = useState('');
+  const [splatUrlError, setSplatUrlError] = useState<string | null>(null);
+  const [customSplatActive, setCustomSplatActive] = useState(false);
+
+  const handleSplatKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter' || !onSplatUrlLoad) return;
+    const trimmed = splatSearchValue.trim();
+    if (splats.some(s => s.label === trimmed || s.value === trimmed)) return;
+    if (!trimmed.toLowerCase().endsWith('.spz')) {
+      setSplatUrlError('URL must end with .spz');
+      return;
+    }
+    const ok = await onSplatUrlLoad(trimmed);
+    if (ok) {
+      setSplatUrlError(null);
+      setCustomSplatActive(true);
+    } else {
+      setSplatUrlError('File not found at the specified URL');
+    }
+  }, [onSplatUrlLoad, splatSearchValue, splats]);
 
   // Command state
   const [commands, setCommands] = useState<CommandDefinition[]>([]);
@@ -315,6 +354,45 @@ function ControlPanel(props: ControlPanelProps) {
                 comboboxProps={{ zIndex: 1000 }}
               />
             </LabeledInput>
+          )}
+
+          {(splats.length > 0 || splatSection) && (
+            <LabeledInput id="splat-select" label="Splat">
+              <Tooltip label={splatUrlError ?? ''} color="red" position="bottom" opened={splatUrlError !== null} withArrow>
+                <Select
+                  id="splat-select"
+                  placeholder={onSplatUrlLoad !== undefined ? 'Select splat or paste .spz URL' : 'Select splat'}
+                  data={splats}
+                  value={splatValue}
+                  onChange={(val) => { onSplatChange(val); setSplatUrlError(null); setCustomSplatActive(false); }}
+                  searchable={onSplatUrlLoad !== undefined}
+                  searchValue={splatSearchValue}
+                  onSearchChange={(val) => { setSplatSearchValue(val); if (val) setSplatUrlError(null); }}
+                  onKeyDown={handleSplatKeyDown}
+                  size="xs"
+                  radius="xs"
+                  clearable
+                  styles={{
+                    input: { minHeight: '1.625rem', height: '1.625rem', padding: '0.5em' },
+                  }}
+                  comboboxProps={{ zIndex: 1000 }}
+                />
+              </Tooltip>
+            </LabeledInput>
+          )}
+
+          {/* Splat controls — when splat.control === true and splat is selected, or a custom URL splat is active */}
+          {((splatConfig?.control && splatValue !== null) || customSplatActive) && onCalibrateSplat && (
+            <SplatSection
+              scale={splatConfig?.scale ?? 1.0}
+              xOffset={splatConfig?.xOffset ?? 0.0}
+              yOffset={splatConfig?.yOffset ?? 0.0}
+              zOffset={splatConfig?.zOffset ?? 0.0}
+              roll={splatConfig?.roll ?? 0.0}
+              pitch={splatConfig?.pitch ?? 0.0}
+              yaw={splatConfig?.yaw ?? 0.0}
+              onCalibrate={onCalibrateSplat}
+            />
           )}
 
           {policies.length > 0 && (

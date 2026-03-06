@@ -104,7 +104,7 @@ def setup_builder() -> mjswan.Builder:
     g1_scene = demo_project.add_scene(
         spec=mujoco.MjSpec.from_file("assets/unitree_g1/scene.xml"),
         name="G1",
-    )
+    ).add_splat_section()  # Show Splat section only
     g1_loco_policy = g1_scene.add_policy(
         policy=onnx.load("assets/unitree_g1/locomotion.onnx"),
         name="Locomotion",

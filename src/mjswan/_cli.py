@@ -32,6 +32,11 @@ def simple() -> None:
     _run_script("examples/demo/simple.py")
 
 
+def splat() -> None:
+    """Run examples/demo/splat.py"""
+    _run_script("examples/demo/splat.py")
+
+
 def mjlab() -> None:
     """Run examples/mjlab/mjlab_integration.py"""
     _run_script("examples/mjlab/mjlab_integration.py")

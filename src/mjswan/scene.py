@@ -13,6 +13,7 @@ import mujoco
 import onnx
 
 from .policy import PolicyConfig, PolicyHandle
+from .splat import SplatConfig, SplatHandle
 
 if TYPE_CHECKING:
     from .project import ProjectHandle
@@ -36,6 +37,12 @@ class SceneConfig:
 
     metadata: dict[str, Any] = field(default_factory=dict)
     """Additional metadata for the scene."""
+
+    splats: list[SplatConfig] = field(default_factory=list)
+    """Gaussian Splat backgrounds available for this scene."""
+
+    splat_section: bool = False
+    """Show the Splat section in the control panel even when no splats are defined."""
 
     @property
     def scene_filename(self) -> str:
@@ -101,6 +108,116 @@ class SceneHandle:
         self._config.policies.append(policy_config)
         return PolicyHandle(policy_config, self)
 
+    def add_splat(
+        self,
+        name: str,
+        *,
+        source: str | None = None,
+        url: str | None = None,
+        scale: float = 1.0,
+        x_offset: float = 0.0,
+        y_offset: float = 0.0,
+        z_offset: float = 0.0,
+        roll: float = 0.0,
+        pitch: float = 0.0,
+        yaw: float = 0.0,
+        collider_url: str | None = None,
+        control: bool = False,
+    ) -> SplatHandle:
+        """Add a Gaussian Splat background to this scene.
+
+        Provide either ``source`` (recommended) or ``url`` — not both.
+
+        Using ``source`` copies the .spz file into the built application so it
+        is served locally, giving you a fully self-contained deployment with no
+        external dependencies. This is the recommended approach.
+
+        Using ``url`` keeps the .spz file on an external server. The app stays
+        smaller, but requires network access at runtime and will not work
+        offline.
+
+        Args:
+            name: Display name shown in the viewer control panel.
+            source: Local path to a .spz splat file to bundle into the app.
+                The file is copied during :meth:`Builder.build`.
+            url: URL to an external .spz splat file. The browser fetches it at
+                runtime; the file is not bundled.
+            scale: Metric scale factor. Use ``metric_scale_factor`` from your
+                capture metadata if available.
+            x_offset: X-axis position offset (in scaled splat units).
+            y_offset: Y-axis position offset (in scaled splat units).
+            z_offset: Vertical position offset. Use ``ground_plane_offset`` from
+                your capture metadata if available.
+            roll: Roll rotation in degrees applied on top of the COLMAP→Three.js
+                base rotation.
+            pitch: Pitch rotation in degrees applied on top of the COLMAP→Three.js
+                base rotation.
+            yaw: Yaw rotation in degrees applied on top of the COLMAP→Three.js
+                base rotation.
+            collider_url: Optional URL or local path to a .glb collision mesh.
+            control: If True, shows scale and offset controls in the viewer
+                control panel. Defaults to False.
+
+        Returns:
+            SplatHandle for further configuration.
+
+        Example:
+            # Recommended: bundle the .spz file into the app
+            scene.add_splat(
+                "Outdoor",
+                source="background.spz",
+                scale=1.35,
+                z_offset=1.0,
+            )
+
+            # Alternative: reference an external URL
+            scene.add_splat(
+                "Outdoor",
+                url="https://cdn.example.com/background.spz",
+                scale=1.35,
+                z_offset=1.0,
+            )
+        """
+        if source is None and url is None:
+            raise ValueError(
+                "Provide either 'source' (local .spz file path to bundle) "
+                "or 'url' (external URL)."
+            )
+        if source is not None and url is not None:
+            raise ValueError("Provide either 'source' or 'url', not both.")
+
+        splat_config = SplatConfig(
+            name=name,
+            source=source,
+            url=url,
+            scale=scale,
+            x_offset=x_offset,
+            y_offset=y_offset,
+            z_offset=z_offset,
+            roll=roll,
+            pitch=pitch,
+            yaw=yaw,
+            collider_url=collider_url,
+            control=control,
+        )
+        self._config.splats.append(splat_config)
+        return SplatHandle(splat_config, self)
+
+    def add_splat_section(self) -> SceneHandle:
+        """Show the Splat section in the control panel even when no splats are defined.
+
+        This allows users to load splats by pasting a .spz URL directly in the
+        control panel, without requiring any pre-configured splats.
+
+        Returns:
+            Self for method chaining.
+
+        Example:
+            scene.add_splat_section()
+        """
+        self._config.splat_section = True
+        return self
+
     def set_metadata(self, key: str, value: Any) -> SceneHandle:
         """Set metadata for this scene.
 
@@ -115,4 +232,4 @@ class SceneHandle:
         return self
 
 
-__all__ = ["SceneConfig", "SceneHandle"]
+__all__ = ["SceneConfig", "SceneHandle", "SplatConfig", "SplatHandle"]

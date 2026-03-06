@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MantineProvider } from '@mantine/core';
 import MjswanViewer from './components/MjswanViewer';
 import ControlPanel from './ControlPanel';
+import type { mjswanRuntime } from './core/engine/runtime';
+import type { SplatConfig } from './core/scene/splat';
 import { theme } from './AppTheme';
 import { LoadingProvider, useLoading } from './contexts/LoadingContext';
 import { Loader } from './components/Loader';
@@ -18,6 +20,8 @@ interface SceneConfig {
   metadata: Record<string, unknown>;
   policies: PolicyConfig[];
   path?: string;
+  splats?: SplatConfig[];
+  splatSection?: boolean;
 }
 
 interface ProjectConfig {
@@ -213,6 +217,9 @@ function AppContent() {
   const [currentScene, setCurrentScene] = useState<SceneConfig | null>(null);
   const [selectedPolicy, setSelectedPolicy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedSplat, setSelectedSplat] = useState<string | null>(null);
+  const [customSplatUrl, setCustomSplatUrl] = useState<string | null>(null);
+  const runtimeRef = useRef<mjswanRuntime | null>(null);
   const { showLoading, hideLoading } = useLoading();
 
   const projectId = useMemo(() => getProjectIdFromLocation(), []);
@@ -275,6 +282,26 @@ function AppContent() {
     const projectDir = currentProject.id ? currentProject.id : 'main';
     return `${projectDir}/assets/${selectedPolicyConfig.config}`.replace(/\/+/g, '/');
   }, [currentProject, selectedPolicyConfig]);
+
+  // Resolve bundled splat paths to URLs the viewer can fetch.
+  // When config.json uses "path" (bundled), convert it to a relative URL.
+  // When config.json uses "url" (external), pass it through unchanged.
+  const resolvedSplats = useMemo(() => {
+    if (!currentProject || !currentScene?.splats?.length) return [] as SplatConfig[];
+    const projectDir = currentProject.id ? currentProject.id : 'main';
+    return currentScene.splats.map((splat) => {
+      if (splat.path) {
+        const resolvedUrl = `${projectDir}/assets/${splat.path}`.replace(/\/+/g, '/');
+        return { ...splat, url: resolvedUrl };
+      }
+      return splat;
+    });
+  }, [currentProject, currentScene?.splats]);
+
+  const resolvedSplatConfig = useMemo(() => {
+    if (!selectedSplat) return customSplatUrl ? { name: 'Custom', url: customSplatUrl } : null;
+    return resolvedSplats.find((s) => s.name === selectedSplat) ?? null;
+  }, [resolvedSplats, selectedSplat, customSplatUrl]);
   const projectOptions = useMemo(() => {
     if (!config) {
       return [] as { value: string; label: string }[];
@@ -309,6 +336,54 @@ function AppContent() {
   const handleViewerReady = useCallback(() => {
     hideLoading();
   }, [hideLoading]);
+
+  // Reset splat selection when switching scenes
+  useEffect(() => {
+    const firstSplat = currentScene?.splats?.[0];
+    setSelectedSplat(firstSplat ? firstSplat.name : null);
+    setCustomSplatUrl(null);
+  }, [currentScene]);
+
+  const handleRuntimeReady = useCallback((runtime: mjswanRuntime) => {
+    runtimeRef.current = runtime;
+  }, []);
+
+  const splatOptions = useMemo(() => {
+    if (!currentScene?.splats?.length) return [] as { value: string; label: string }[];
+    return currentScene.splats.map((s) => ({ value: s.name, label: s.name }));
+  }, [currentScene?.splats]);
+
+  const handleSplatChange = useCallback((value: string | null) => {
+    if (value === null) {
+      runtimeRef.current?.setSplatVisible(false);
+    } else {
+      const splat = resolvedSplats.find((s) => s.name === value);
+      if (splat) {
+        runtimeRef.current?.setSplat(splat);
+      }
+    }
+    setSelectedSplat(value);
+    setCustomSplatUrl(null);
+  }, [resolvedSplats]);
+
+  const handleSplatUrlLoad = useCallback(async (url: string): Promise<boolean> => {
+    try {
+      const res = await fetch(url, { method: 'HEAD' });
+      if (!res.ok) return false;
+    } catch {
+      return false;
+    }
+    runtimeRef.current?.setSplat({ name: 'Custom', url });
+    setCustomSplatUrl(url);
+    return true;
+  }, []);
+
+  const handleCalibrateSplat = useCallback((scale: number, xOffset: number, yOffset: number, zOffset: number, roll: number, pitch: number, yaw: number) => {
+    const splat = resolvedSplatConfig ?? (customSplatUrl ? { name: 'Custom', url: customSplatUrl } : null);
+    if (splat) {
+      runtimeRef.current?.calibrateSplat({ ...splat, scale, xOffset, yOffset, zOffset, roll, pitch, yaw });
+    }
+  }, [resolvedSplatConfig, customSplatUrl]);
 
   const handleProjectChange = useCallback(
     (value: string | null) => {
@@ -389,6 +464,13 @@ function AppContent() {
           scenes={sceneOptions}
           sceneValue={sceneValue}
           onSceneChange={handleSceneChange}
+          splats={splatOptions}
+          splatSection={currentScene?.splatSection ?? false}
+          splatValue={selectedSplat}
+          onSplatChange={handleSplatChange}
+          splatConfig={resolvedSplatConfig}
+          onCalibrateSplat={handleCalibrateSplat}
+          onSplatUrlLoad={handleSplatUrlLoad}
           policies={policyOptions}
           policyValue={selectedPolicy}
           onPolicyChange={handlePolicyChange}
@@ -398,8 +480,10 @@ function AppContent() {
           scenePath={scenePath}
           baseUrl={import.meta.env.BASE_URL || '/'}
           policyConfigPath={policyConfigPath}
+          splatConfig={resolvedSplatConfig}
           onError={handleViewerError}
           onReady={handleViewerReady}
+          onRuntimeReady={handleRuntimeReady}
         />
       </div>
     </MantineProvider>
