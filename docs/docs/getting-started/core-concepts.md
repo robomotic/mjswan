@@ -117,6 +117,14 @@ Set `control=True` to expose these alignment controls as live sliders in the vie
 scene.add_splat("Lab", source="lab.spz", scale=1.35, control=True)
 ```
 
+### Splat selector without pre-configured splats
+
+By default, the Splat selector only appears when at least one splat is attached to the scene. Call `add_splat_section()` to show the selector unconditionally — this lets viewers paste an arbitrary `.spz` URL directly in the control panel at runtime:
+
+```python
+scene.add_splat_section()
+```
+
 ## Policy
 
 A policy is an ONNX model that runs inference inside the browser. Attach one or more policies to a scene:

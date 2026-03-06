@@ -173,6 +173,15 @@ scene.add_splat("Lab A", source="lab_a.spz", scale=1.35, z_offset=0.71)
 scene.add_splat("Lab B", source="lab_b.spz", scale=1.20, z_offset=0.65)
 ```
 
+## Splat URL input without pre-configured splats
+
+Call `add_splat_section()` to show the Splat selector in the control panel even when no splats are pre-configured. Users can then paste an arbitrary `.spz` URL at runtime.
+
+```python
+scene = project.add_scene(name="Demo", spec=spec)
+scene.add_splat_section()
+```
+
 ## Calibrating a new splat capture
 
 Set `control=True` to expose live sliders for scale, offset, and rotation while you dial in the alignment. Remove `control=True` once the values are finalised.

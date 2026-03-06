@@ -21,6 +21,7 @@ interface SceneConfig {
   policies: PolicyConfig[];
   path?: string;
   splats?: SplatConfig[];
+  splatSection?: boolean;
 }
 
 interface ProjectConfig {
@@ -464,6 +465,7 @@ function AppContent() {
           sceneValue={sceneValue}
           onSceneChange={handleSceneChange}
           splats={splatOptions}
+          splatSection={currentScene?.splatSection ?? false}
           splatValue={selectedSplat}
           onSplatChange={handleSplatChange}
           splatConfig={resolvedSplatConfig}

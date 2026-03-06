@@ -151,6 +151,11 @@ class Builder:
                                 if scene.splats
                                 else {}
                             ),
+                            **(
+                                {"splatSection": True}
+                                if scene.splat_section and not scene.splats
+                                else {}
+                            ),
                             "policies": [
                                 (
                                     {

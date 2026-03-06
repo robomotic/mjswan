@@ -28,6 +28,7 @@ interface ControlPanelProps {
   sceneValue: string | null;
   onSceneChange: (value: string | null) => void;
   splats: SelectOption[];
+  splatSection?: boolean;
   splatValue: string | null;
   onSplatChange: (value: string | null) => void;
   /** Splat config from the current scene (null if no splat), used for dev-mode calibration. */
@@ -123,6 +124,7 @@ function ControlPanel(props: ControlPanelProps) {
     sceneValue,
     onSceneChange,
     splats,
+    splatSection = false,
     splatValue,
     onSplatChange,
     splatConfig,
@@ -354,7 +356,7 @@ function ControlPanel(props: ControlPanelProps) {
             </LabeledInput>
           )}
 
-          {(splats.length > 0 || onSplatUrlLoad !== undefined) && (
+          {(splats.length > 0 || splatSection) && (
             <LabeledInput id="splat-select" label="Splat">
               <Tooltip label={splatUrlError ?? ''} color="red" position="bottom" opened={splatUrlError !== null} withArrow>
                 <Select

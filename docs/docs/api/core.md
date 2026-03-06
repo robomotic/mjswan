@@ -182,6 +182,18 @@ Add a Gaussian Splat background to the scene. Exactly one of `source` or `url` m
 
 **Raises** — `ValueError` if both or neither of `source`/`url` are provided.
 
+### SceneHandle.add_splat_section
+
+```python
+def add_splat_section() -> SceneHandle
+```
+
+Show the Splat selector in the control panel even when no splats are pre-configured. This lets users load a `.spz` file by pasting an external URL directly in the viewer, without requiring any `add_splat()` calls.
+
+Has no effect when at least one splat is already attached (the selector is shown automatically in that case).
+
+Returns `self` for chaining.
+
 ### SceneHandle.set_metadata
 
 ```python

@@ -41,6 +41,9 @@ class SceneConfig:
     splats: list[SplatConfig] = field(default_factory=list)
     """Gaussian Splat backgrounds available for this scene."""
 
+    splat_section: bool = False
+    """Show the Splat section in the control panel even when no splats are defined."""
+
     @property
     def scene_filename(self) -> str:
         """Return the scene filename based on which field is set."""
@@ -199,6 +202,21 @@ class SceneHandle:
         )
         self._config.splats.append(splat_config)
         return SplatHandle(splat_config, self)
+
+    def add_splat_section(self) -> SceneHandle:
+        """Show the Splat section in the control panel even when no splats are defined.
+
+        This allows users to load splats by pasting a .spz URL directly in the
+        control panel, without requiring any pre-configured splats.
+
+        Returns:
+            Self for method chaining.
+
+        Example:
+            scene.add_splat_section()
+        """
+        self._config.splat_section = True
+        return self
 
     def set_metadata(self, key: str, value: Any) -> SceneHandle:
         """Set metadata for this scene.
