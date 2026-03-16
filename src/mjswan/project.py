@@ -114,7 +114,6 @@ class ProjectHandle:
         self._config.scenes.append(scene_config)
         return SceneHandle(scene_config, self)
 
-
     def add_mjlab_scene(self, task_id: str) -> SceneHandle:
         """Add a MuJoCo scene from an mjlab task.
 
