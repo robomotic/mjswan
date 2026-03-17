@@ -31,6 +31,10 @@ const MjswanViewer = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const runtimeRef = useRef<mjswanRuntime | null>(null);
   const mujocoRef = useRef<MainModule | null>(null);
+  // Ref so the async init reads the latest splatConfig after awaiting WASM/scene load,
+  // by which time App.tsx's selectedSplat effect has already fired.
+  const splatConfigRef = useRef(splatConfig);
+  splatConfigRef.current = splatConfig;
 
   useEffect(() => {
     let cancelled = false;
@@ -67,7 +71,7 @@ const MjswanViewer = ({
       }
 
       notify('Loading scene assets...');
-      await runtimeRef.current.loadEnvironment(scenePath, policyConfigPath ?? null, splatConfig ?? null);
+      await runtimeRef.current.loadEnvironment(scenePath, policyConfigPath ?? null, splatConfigRef.current ?? null);
       if (cancelled) {
         return;
       }
