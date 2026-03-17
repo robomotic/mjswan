@@ -437,7 +437,7 @@ function AppContent() {
 
   if (error) {
     return (
-      <MantineProvider theme={theme} defaultColorScheme="dark">
+      <MantineProvider theme={theme} defaultColorScheme="auto">
         <div className="app">
           <div className="hud hud-error">
             <h1 className="hud-title">mjswan</h1>
@@ -453,7 +453,7 @@ function AppContent() {
   }
 
   return (
-    <MantineProvider theme={theme} defaultColorScheme="dark">
+    <MantineProvider theme={theme} defaultColorScheme="auto">
       <div className="app">
         <Loader />
 <ControlPanel
