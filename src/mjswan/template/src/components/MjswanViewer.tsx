@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { mjswanRuntime } from '../core/engine/runtime';
+import { useEffect, useRef } from 'react';
+import { mjswanRuntime, WasmMemoryLimitError } from '../core/engine/runtime';
 import type { SplatConfig } from '../core/scene/splat';
 import type { MainModule } from 'mujoco';
 
@@ -13,6 +13,10 @@ type MjswanViewerProps = {
   onReady?: () => void;
   onRuntimeReady?: (runtime: mjswanRuntime) => void;
 };
+
+// Prevents infinite reload loops: stores the scene path that triggered a
+// reload so we attempt the reload at most once per scene.
+const OOM_RELOAD_KEY = 'mjswan_oom_reload_scene';
 
 const MjswanViewer = ({
   scenePath,
@@ -67,12 +71,24 @@ const MjswanViewer = ({
       if (cancelled) {
         return;
       }
+      sessionStorage.removeItem(OOM_RELOAD_KEY);
       notify('Running simulation');
       onReady?.();
     };
 
     init().catch((error) => {
       if (!cancelled) {
+        if (error instanceof WasmMemoryLimitError) {
+          // WASM linear memory cannot shrink within a session; a reload gives a
+          // fresh heap.  Guard against looping if the scene is truly too large.
+          if (sessionStorage.getItem(OOM_RELOAD_KEY) !== scenePath) {
+            console.warn('[MjswanViewer] OOM — reloading page to free memory...');
+            sessionStorage.setItem(OOM_RELOAD_KEY, scenePath);
+            window.location.reload();
+            return;
+          }
+          sessionStorage.removeItem(OOM_RELOAD_KEY);
+        }
         console.error('Failed to initialize MuJoCo viewer:', error);
         onError?.(error instanceof Error ? error : new Error(String(error)));
         notify('Failed to load scene');
