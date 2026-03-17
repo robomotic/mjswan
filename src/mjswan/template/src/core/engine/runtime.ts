@@ -31,6 +31,31 @@ type RuntimeOptions = {
   baseUrl?: string;
 };
 
+/** Thrown when a scene exceeds the browser's 2 GB WebAssembly memory limit. */
+export class WasmMemoryLimitError extends Error {
+  constructor() {
+    super(
+      "This scene cannot be loaded because it exceeds the browser's " +
+        'WebAssembly 2 GB memory limit. ' +
+        'Try closing other browser tabs or reloading the page to free memory.'
+    );
+    this.name = 'WasmMemoryLimitError';
+  }
+}
+
+// mj_loadXML surfaces OOM via four distinct paths depending on which internal
+// allocator hits the 2 GB ceiling first (null return, MuJoCo error string,
+// lodepng error string, or raw bad_alloc).
+function isWasmOom(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  return (
+    msg.includes('MjModel loading returned null') ||
+    msg.includes('Could not allocate memory') ||
+    msg.includes('memory allocation failed') ||
+    msg.includes('bad_alloc')
+  );
+}
+
 type BodyState = {
   position: THREE.Vector3;
   quaternion: THREE.Quaternion;
@@ -239,7 +264,7 @@ export class mjswanRuntime {
 
       // Normal load
       await downloadExampleScenesFolder(this.mujoco, scenePath, this.baseUrl);
-      await this.loadScene(scenePath);
+      await this.loadSceneWithOomRetry(scenePath);
 
       // Capture and cache resources
       await this.captureAndCacheResources(scenePath);
@@ -346,6 +371,30 @@ export class mjswanRuntime {
     })();
 
     await this.loadingScene;
+  }
+
+  // On OOM, evict all cached scenes to reclaim the WASM malloc free-list and
+  // retry once.  If the retry also fails, throw WasmMemoryLimitError.
+  private async loadSceneWithOomRetry(scenePath: string): Promise<void> {
+    try {
+      await this.loadScene(scenePath);
+    } catch (error) {
+      if (!isWasmOom(error)) {
+        throw error;
+      }
+      console.warn('[mjswanRuntime] OOM — clearing cache and retrying...');
+      this.loadingScene = null;
+      await this.sceneCacheManager.clear();
+      try {
+        await this.loadScene(scenePath);
+      } catch (retryError) {
+        this.loadingScene = null;
+        if (isWasmOom(retryError)) {
+          throw new WasmMemoryLimitError();
+        }
+        throw retryError;
+      }
+    }
   }
 
   async startLoop(): Promise<void> {
