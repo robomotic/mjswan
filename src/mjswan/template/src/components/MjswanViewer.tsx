@@ -84,7 +84,7 @@ const MjswanViewer = ({
       runtimeRef.current?.dispose();
       runtimeRef.current = null;
     };
-  }, [scenePath, baseUrl, policyConfigPath, splatConfig, onStatusChange, onError, onReady]);
+  }, [scenePath, baseUrl, policyConfigPath, onStatusChange, onError, onReady]);
 
   return <div ref={containerRef} className="viewer" />;
 };

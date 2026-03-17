@@ -355,7 +355,7 @@ function AppContent() {
 
   const handleSplatChange = useCallback((value: string | null) => {
     if (value === null) {
-      runtimeRef.current?.setSplatVisible(false);
+      void runtimeRef.current?.setSplat(null);
     } else {
       const splat = resolvedSplats.find((s) => s.name === value);
       if (splat) {
