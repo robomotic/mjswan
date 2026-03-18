@@ -66,6 +66,8 @@ jobs:
   publish-pypi:
     needs: release
     uses: ./.github/workflows/publish-pypi.yml
+    with:
+      ref: v${{ inputs.version }}
     permissions:
       id-token: write
       contents: read
@@ -73,4 +75,6 @@ jobs:
   publish-npm:
     needs: release
     uses: ./.github/workflows/publish-npm.yml
+    with:
+      ref: v${{ inputs.version }}
     secrets: inherit
