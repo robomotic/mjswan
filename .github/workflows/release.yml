@@ -62,3 +62,15 @@ jobs:
           gh release create "v${{ inputs.version }}" \
             --title "v${{ inputs.version }}" \
             --generate-notes
+
+  publish-pypi:
+    needs: release
+    uses: ./.github/workflows/publish-pypi.yml
+    permissions:
+      id-token: write
+      contents: read
+
+  publish-npm:
+    needs: release
+    uses: ./.github/workflows/publish-npm.yml
+    secrets: inherit
