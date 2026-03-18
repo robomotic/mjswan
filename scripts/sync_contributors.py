@@ -44,7 +44,7 @@ def main() -> None:
         "  login: string;\n"
         "  html_url: string;\n"
         "}\n\n"
-        f"export const GITHUB_CONTRIBUTORS: Contributor[] = [\n{entries}\n];"
+        f"export const GITHUB_CONTRIBUTORS: Contributor[] = [\n{entries}\n];\n"
     )
 
     content = version_path.read_text()
