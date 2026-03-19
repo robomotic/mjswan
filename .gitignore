@@ -58,7 +58,11 @@ __pycache__/
 mjswan-*.tgz
 
 # Claude
-.claude
+.claude/*
+!.claude/settings.json
+!.claude/commands/
+.claude/commands/*
+!.claude/commands/*.md
 
 # Docs
 docs/site
