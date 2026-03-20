@@ -18,7 +18,8 @@ from .command import (
 )
 from .policy import PolicyConfig, PolicyHandle
 from .project import ProjectConfig, ProjectHandle
-from .scene import CameraConfig, SceneConfig, SceneHandle
+from .camera import CameraConfig
+from .scene import SceneConfig, SceneHandle
 from .splat import SplatConfig, SplatHandle
 
 __all__ = [

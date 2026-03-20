@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { mjswanRuntime, WasmMemoryLimitError } from '../core/engine/runtime';
-import type { CameraConfig } from '../core/engine/runtime';
+import type { CameraConfig } from '../core/engine/camera';
 import type { SplatConfig } from '../core/scene/splat';
 import type { MainModule } from 'mujoco';
 
