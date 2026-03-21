@@ -218,7 +218,7 @@ export class mjswanRuntime {
     this.onnxInferencing = false;
     this.splatMesh = null;
     this.colliderMesh = null;
-    this.cameraState = { trackBodyId: null, fixedCamIndex: null };
+    this.cameraState = { trackBodyId: null, fixedCamIndex: null, prevBodyPos: null };
 
     // Initialize cache system (singleton shared across runtime instances)
     this.sceneCacheManager = SceneCacheManager.getInstance(this.mujoco);

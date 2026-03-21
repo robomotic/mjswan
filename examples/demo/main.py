@@ -102,6 +102,10 @@ def setup_builder() -> mjswan.Builder:
     g1_scene = demo_project.add_scene(
         spec=mujoco.MjSpec.from_file("assets/unitree_g1/scene.xml"),
         name="G1",
+    ).set_camera(
+        position=(3.0, -2.0, 3.5),
+        target=(0.0, 0.0, 0.7),
+        track_body_name="torso_link",
     )
     g1_scene.add_splat(
         name="Street",
@@ -132,6 +136,10 @@ def setup_builder() -> mjswan.Builder:
     go2_scene = demo_project.add_scene(
         spec=mujoco.MjSpec.from_file("assets/unitree_go2/scene.xml"),
         name="Go2",
+    ).set_camera(
+        position=(3.0, 2.0, 2.0),
+        target=(0.0, 0.0, 0.7),
+        track_body_name="base",
     )
     go2_scene.add_policy(
         policy=onnx.load("assets/unitree_go2/facet.onnx"),
@@ -153,6 +161,10 @@ def setup_builder() -> mjswan.Builder:
     go1_scene = demo_project.add_scene(
         spec=mujoco.MjSpec.from_file("assets/unitree_go1/go1.xml"),
         name="Go1",
+    ).set_camera(
+        position=(2.0, -2.0, 1.5),
+        target=(0.0, 0.0, 0.2),
+        track_body_name="trunk",
     )
     go1_scene.add_policy(
         policy=onnx.load("assets/unitree_go1/himloco.onnx"),

@@ -36,7 +36,7 @@ def setup_builder() -> mjswan.Builder:
         name="G1",
     ).set_camera(
         position=(3.0, -2.0, 1.5),
-        target=(0.0, 0.0, 0.5),
+        target=(0.0, 0.0, 0.7),
         track_body_name="torso_link",
     ).add_policy(
         policy=onnx.load("assets/unitree_g1/locomotion.onnx"),
@@ -51,10 +51,6 @@ def setup_builder() -> mjswan.Builder:
     demo_project.add_scene(
         model=mujoco.MjModel.from_xml_path("assets/unitree_go2/scene.xml"),
         name="Go2",
-    ).set_camera(
-        position=(3, 3, 3),
-        target=(0.0, 0.0, 1.0),
-        track_body_name="base",
     )
 
     return builder
