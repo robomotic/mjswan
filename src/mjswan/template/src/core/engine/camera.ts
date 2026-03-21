@@ -21,6 +21,8 @@ export type CameraState = {
   trackBodyId: number | null;
   /** MuJoCo camera index to use as a fixed camera, or null. */
   fixedCamIndex: number | null;
+  /** Previous body world position used to compute per-frame delta for parallel tracking. */
+  prevBodyPos: THREE.Vector3 | null;
 };
 
 const DEFAULT_POSITION = new THREE.Vector3(2.0, 1.7, 1.7);
@@ -42,7 +44,7 @@ export function applyCameraConfig(
   controls: OrbitControls,
   mjModel: MjModel | null
 ): CameraState {
-  const state: CameraState = { trackBodyId: null, fixedCamIndex: null };
+  const state: CameraState = { trackBodyId: null, fixedCamIndex: null, prevBodyPos: null };
   controls.enabled = true;
 
   if (!config) {
@@ -124,9 +126,15 @@ export function updateCameraFromData(
     const lookDirMJ = [-m[2], -m[5], -m[8]] as [number, number, number];
     camera.lookAt(pos.clone().add(mjcToThreeCoordinate(lookDirMJ)));
   } else if (state.trackBodyId !== null) {
-    // Body tracking: shift the orbit controls target to the body's world position.
-    // The user can still orbit/zoom around the tracked body.
+    // Parallel tracking: translate both the camera and the orbit target by the
+    // body's delta each frame, preserving the camera angle and zoom level.
     const b = state.trackBodyId;
-    controls.target.copy(mjcToThreeCoordinate(mjData.xpos.slice(b * 3, b * 3 + 3)));
+    const bodyPos = mjcToThreeCoordinate(mjData.xpos.slice(b * 3, b * 3 + 3));
+    if (state.prevBodyPos !== null) {
+      const delta = bodyPos.clone().sub(state.prevBodyPos);
+      camera.position.add(delta);
+      controls.target.add(delta);
+    }
+    state.prevBodyPos = bodyPos;
   }
 }
