@@ -7,6 +7,7 @@ __version__ = "0.2.4"
 
 from .app import mjswanApp
 from .builder import Builder
+from .camera import CameraConfig
 from .command import (
     Button,
     ButtonConfig,
@@ -33,6 +34,7 @@ __all__ = [
     # Configs
     "ProjectConfig",
     "SceneConfig",
+    "CameraConfig",
     "SplatConfig",
     "PolicyConfig",
     # Commands

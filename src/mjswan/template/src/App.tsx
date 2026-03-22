@@ -15,6 +15,14 @@ interface PolicyConfig {
   config?: string;
 }
 
+interface CameraConfig {
+  position?: [number, number, number];
+  target?: [number, number, number];
+  fov?: number;
+  trackBodyName?: string;
+  mujocoCamera?: string;
+}
+
 interface SceneConfig {
   name: string;
   metadata: Record<string, unknown>;
@@ -22,6 +30,7 @@ interface SceneConfig {
   path?: string;
   splats?: SplatConfig[];
   splatSection?: boolean;
+  camera?: CameraConfig;
 }
 
 interface ProjectConfig {
@@ -481,6 +490,7 @@ function AppContent() {
           baseUrl={import.meta.env.BASE_URL || '/'}
           policyConfigPath={policyConfigPath}
           splatConfig={resolvedSplatConfig}
+          cameraConfig={currentScene?.camera}
           onError={handleViewerError}
           onReady={handleViewerReady}
           onRuntimeReady={handleRuntimeReady}

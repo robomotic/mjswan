@@ -197,6 +197,11 @@ class Builder:
                                 if scene.splat_section and not scene.splats
                                 else {}
                             ),
+                            **(
+                                {"camera": scene.camera.to_dict()}
+                                if scene.camera and scene.camera.to_dict()
+                                else {}
+                            ),
                             "policies": [
                                 (
                                     {

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { mjswanRuntime, WasmMemoryLimitError } from '../core/engine/runtime';
+import type { CameraConfig } from '../core/engine/camera';
 import type { SplatConfig } from '../core/scene/splat';
 import type { MainModule } from 'mujoco';
 
@@ -8,6 +9,7 @@ type MjswanViewerProps = {
   baseUrl: string;
   policyConfigPath?: string | null;
   splatConfig?: SplatConfig | null;
+  cameraConfig?: CameraConfig | null;
   onStatusChange?: (status: string) => void;
   onError?: (error: Error) => void;
   onReady?: () => void;
@@ -23,6 +25,7 @@ const MjswanViewer = ({
   baseUrl,
   policyConfigPath,
   splatConfig,
+  cameraConfig,
   onStatusChange,
   onError,
   onReady,
@@ -71,7 +74,7 @@ const MjswanViewer = ({
       }
 
       notify('Loading scene assets...');
-      await runtimeRef.current.loadEnvironment(scenePath, policyConfigPath ?? null, splatConfigRef.current ?? null);
+      await runtimeRef.current.loadEnvironment(scenePath, policyConfigPath ?? null, splatConfigRef.current ?? null, cameraConfig ?? null);
       if (cancelled) {
         return;
       }
@@ -104,7 +107,7 @@ const MjswanViewer = ({
       runtimeRef.current?.dispose();
       runtimeRef.current = null;
     };
-  }, [scenePath, baseUrl, policyConfigPath, onStatusChange, onError, onReady]);
+  }, [scenePath, baseUrl, policyConfigPath, cameraConfig, onStatusChange, onError, onReady]);
 
   return <div ref={containerRef} className="viewer" />;
 };
