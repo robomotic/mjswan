@@ -102,10 +102,15 @@ def setup_builder() -> mjswan.Builder:
     g1_scene = demo_project.add_scene(
         spec=mujoco.MjSpec.from_file("assets/unitree_g1/scene.xml"),
         name="G1",
-    ).set_camera(
-        position=(3.0, -2.0, 3.0),
-        target=(0.0, 0.0, 0.7),
-        track_body_name="torso_link",
+    ).set_viewer_config(
+        mjswan.ViewerConfig(
+            lookat=(0.0, 0.0, 0.7),
+            distance=4.3,
+            elevation=-33.0,
+            azimuth=-34.0,
+            origin_type=mjswan.ViewerConfig.OriginType.ASSET_BODY,
+            body_name="torso_link",
+        )
     )
     g1_scene.add_splat(
         name="Street",
@@ -136,10 +141,15 @@ def setup_builder() -> mjswan.Builder:
     go2_scene = demo_project.add_scene(
         spec=mujoco.MjSpec.from_file("assets/unitree_go2/scene.xml"),
         name="Go2",
-    ).set_camera(
-        position=(3.0, 2.0, 2.0),
-        target=(0.0, 0.0, 0.7),
-        track_body_name="base",
+    ).set_viewer_config(
+        mjswan.ViewerConfig(
+            lookat=(0.0, 0.0, 0.7),
+            distance=3.8,
+            elevation=-20.0,
+            azimuth=34.0,
+            origin_type=mjswan.ViewerConfig.OriginType.ASSET_BODY,
+            body_name="base",
+        )
     )
     go2_scene.add_policy(
         policy=onnx.load("assets/unitree_go2/facet.onnx"),
@@ -161,10 +171,15 @@ def setup_builder() -> mjswan.Builder:
     go1_scene = demo_project.add_scene(
         spec=mujoco.MjSpec.from_file("assets/unitree_go1/go1.xml"),
         name="Go1",
-    ).set_camera(
-        position=(2.0, -2.0, 1.5),
-        target=(0.0, 0.0, 0.2),
-        track_body_name="trunk",
+    ).set_viewer_config(
+        mjswan.ViewerConfig(
+            lookat=(0.0, 0.0, 0.2),
+            distance=3.1,
+            elevation=-25.0,
+            azimuth=-45.0,
+            origin_type=mjswan.ViewerConfig.OriginType.ASSET_BODY,
+            body_name="trunk",
+        )
     )
     go1_scene.add_policy(
         policy=onnx.load("assets/unitree_go1/himloco.onnx"),
@@ -267,54 +282,83 @@ def setup_builder() -> mjswan.Builder:
 
     registry_specs = gym_registry_specs()
 
+    # (display_name, lookat, distance, elevation, azimuth)
     target_envs = {
         "myoChallengeDieReorientP2-v0": (
             "mc22 Die Reorient",
-            (0.5, -1.6, 1.6),
             (-0.1, -0.5, 1.4),
+            1.3,
+            -9.0,
+            -61.0,
         ),
         "myoChallengeBaodingP2-v1": (
             "mc22 Baoding",
-            (0.5, -1.6, 1.6),
             (-0.1, -0.5, 1.4),
+            1.3,
+            -9.0,
+            -61.0,
         ),
         "myoChallengeRelocateP2-v0": (
             "mc23 Relocate",
-            (0.0, -1.8, 1.6),
-            (0, -0.1, 1.4),
+            (0.0, -0.1, 1.4),
+            1.7,
+            -7.0,
+            -90.0,
         ),
         "myoChallengeChaseTagP2-v0": (
             "mc23 Chase Tag",
-            (4.5, -8.5, 4.0),
-            (0, 0, 1.4),
+            (0.0, 0.0, 1.4),
+            10.0,
+            -15.0,
+            -62.0,
         ),
         "myoChallengeBimanual-v0": (
             "mc24 Bimanual",
-            (0.5, -1.6, 1.6),
-            (0, -0.1, 1.4),
+            (-0.1, -0.5, 1.4),
+            1.3,
+            -9.0,
+            -61.0,
         ),
         "myoChallengeOslRunRandom-v0": (
             "mc24 OSL Run",
-            (4.5, -8.5, 4.0),
-            (0, 0, 1.4),
+            (0.0, 0.0, 1.4),
+            10.0,
+            -15.0,
+            -62.0,
         ),
         "myoChallengeTableTennisP2-v0": (
             "mc25 Table Tennis",
-            (-2.0, -3.5, 2.0),
-            (0, -1.0, 1.4),
+            (0.0, -1.0, 1.4),
+            3.3,
+            -11.0,
+            -129.0,
         ),
         "myoChallengeSoccerP2-v0": (
             "mc25 Soccer",
-            (-14, -5, 6),
-            (0, -3, 2),
+            (0.0, -3.0, 2.0),
+            14.7,
+            -16.0,
+            -172.0,
         ),
     }
 
-    for env_name, (display_name, position, target) in target_envs.items():
+    for env_name, (
+        display_name,
+        lookat,
+        distance,
+        elevation,
+        azimuth,
+    ) in target_envs.items():
         model_path = registry_specs[env_name].kwargs["model_path"]
         mjspec = mujoco.MjSpec.from_file(model_path)
-        myosuite_project.add_scene(name=display_name, spec=mjspec).set_camera(
-            position=position, target=target
+        myosuite_project.add_scene(name=display_name, spec=mjspec).set_viewer_config(
+            mjswan.ViewerConfig(
+                lookat=lookat,
+                distance=distance,
+                elevation=elevation,
+                azimuth=azimuth,
+                origin_type=mjswan.ViewerConfig.OriginType.WORLD,
+            )
         )
 
     return builder

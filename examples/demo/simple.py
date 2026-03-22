@@ -34,10 +34,15 @@ def setup_builder() -> mjswan.Builder:
     demo_project.add_scene(
         spec=mujoco.MjSpec.from_file("assets/unitree_g1/scene.xml"),
         name="G1",
-    ).set_camera(
-        position=(3.0, -2.0, 1.5),
-        target=(0.0, 0.0, 0.7),
-        track_body_name="torso_link",
+    ).set_viewer_config(
+        mjswan.ViewerConfig(
+            lookat=(0.0, 0.0, 0.7),
+            distance=3.7,
+            elevation=-13.0,
+            azimuth=-34.0,
+            origin_type=mjswan.ViewerConfig.OriginType.ASSET_BODY,
+            body_name="torso_link",
+        )
     ).add_policy(
         policy=onnx.load("assets/unitree_g1/locomotion.onnx"),
         name="Locomotion",

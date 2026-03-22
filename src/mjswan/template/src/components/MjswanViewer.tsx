@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { mjswanRuntime, WasmMemoryLimitError } from '../core/engine/runtime';
-import type { CameraConfig } from '../core/engine/camera';
+import type { ViewerConfig } from '../core/engine/viewer_config';
 import type { SplatConfig } from '../core/scene/splat';
 import type { MainModule } from 'mujoco';
 
@@ -9,7 +9,7 @@ type MjswanViewerProps = {
   baseUrl: string;
   policyConfigPath?: string | null;
   splatConfig?: SplatConfig | null;
-  cameraConfig?: CameraConfig | null;
+  cameraConfig?: ViewerConfig | null;
   onStatusChange?: (status: string) => void;
   onError?: (error: Error) => void;
   onReady?: () => void;

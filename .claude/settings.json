@@ -9,6 +9,7 @@
       "Bash(git:*)",
       "Bash(gh:*)",
       "Bash(npm:*)",
+      "Bash(find:*)",
       "WebSearch",
       "WebFetch",
       "Skill(commit-push-pr)",
