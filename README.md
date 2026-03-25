@@ -73,7 +73,7 @@ For detailed installation instructions, visit the [documentation](https://mjswan
 
 mjswan incorporates mujoco models from the external sources in its demo. See the respective submodule for full details, including individual model licenses and copyrights. All models are used under their respective licenses. Please review and comply with those terms for any use or redistribution.
 
-[MyoSuite License](https://github.com/MyoHub/myosuite/blob/main/LICENSE) ･ [robot_descriptions.py License](https://github.com/robot-descriptions/robot_descriptions.py/blob/main/LICENSE) ･ [MuJoCo Playground License](https://github.com/google-deepmind/mujoco_playground/blob/main/LICENSE)
+[Robot Descriptions License](https://github.com/robot-descriptions/robot_descriptions.py/blob/main/LICENSE) ･ [MuJoCo Playground License](https://github.com/google-deepmind/mujoco_playground/blob/main/LICENSE) ･ [MyoSuite License](https://github.com/MyoHub/myosuite/blob/main/LICENSE)
 
 
 ## Acknowledgments

@@ -15,12 +15,19 @@ interface PolicyConfig {
   config?: string;
 }
 
-interface CameraConfig {
-  position?: [number, number, number];
-  target?: [number, number, number];
-  fov?: number;
-  trackBodyName?: string;
-  mujocoCamera?: string;
+interface ViewerConfig {
+  lookat?: [number, number, number];
+  distance?: number;
+  fovy?: number;
+  elevation?: number;
+  azimuth?: number;
+  originType?: 'AUTO' | 'WORLD' | 'ASSET_ROOT' | 'ASSET_BODY';
+  entityName?: string;
+  bodyName?: string;
+  enableReflections?: boolean;
+  enableShadows?: boolean;
+  height?: number;
+  width?: number;
 }
 
 interface SceneConfig {
@@ -30,7 +37,7 @@ interface SceneConfig {
   path?: string;
   splats?: SplatConfig[];
   splatSection?: boolean;
-  camera?: CameraConfig;
+  camera?: ViewerConfig;
 }
 
 interface ProjectConfig {

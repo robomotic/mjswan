@@ -12,9 +12,9 @@ from typing import TYPE_CHECKING, Any
 import mujoco
 import onnx
 
-from .camera import CameraConfig
 from .policy import PolicyConfig, PolicyHandle
 from .splat import SplatConfig, SplatHandle
+from .viewer_config import ViewerConfig
 
 if TYPE_CHECKING:
     from .project import ProjectHandle
@@ -45,8 +45,8 @@ class SceneConfig:
     splat_section: bool = False
     """Show the Splat section in the control panel even when no splats are defined."""
 
-    camera: CameraConfig | None = None
-    """Optional camera configuration for this scene."""
+    viewer: ViewerConfig | None = None
+    """Optional viewer configuration for this scene."""
 
     @property
     def scene_filename(self) -> str:
@@ -222,46 +222,29 @@ class SceneHandle:
         self._config.splat_section = True
         return self
 
-    def set_camera(
-        self,
-        *,
-        position: tuple[float, float, float] | None = None,
-        target: tuple[float, float, float] | None = None,
-        fov: float | None = None,
-        track_body_name: str | None = None,
-        mujoco_camera: str | None = None,
-    ) -> SceneHandle:
-        """Set camera configuration for this scene.
-
-        All arguments are optional — set only what you need.
+    def set_viewer_config(self, config: ViewerConfig) -> SceneHandle:
+        """Set viewer configuration for this scene.
 
         Args:
-            position: Initial camera position in MuJoCo coordinates
-                (x forward, y left, z up). Example: ``(3.0, -2.0, 1.5)``.
-            target: Initial look-at point in MuJoCo coordinates.
-                Example: ``(0.0, 0.0, 0.5)``.
-            fov: Vertical field of view in degrees. Defaults to 45.
-            track_body_name: Name of a MuJoCo body for the camera orbit target
-                to follow. The user can still orbit/zoom around the tracked body.
-            mujoco_camera: Name of a camera defined in the scene XML/spec.
-                The viewer locks to that camera's pose; free orbit is disabled.
+            config: A :class:`ViewerConfig` instance describing the camera
+                position, tracking mode, and rendering settings.
 
         Returns:
             Self for method chaining.
 
         Example::
 
-            scene.set_camera(position=(3.0, -2.0, 1.5), target=(0.0, 0.0, 0.5))
-            scene.set_camera(track_body_name="torso")
-            scene.set_camera(mujoco_camera="front_view")
+            from mjswan import ViewerConfig
+            scene.set_viewer_config(ViewerConfig(
+                lookat=(0.0, 0.0, 0.7),
+                distance=4.3,
+                elevation=-33,
+                azimuth=-34,
+                origin_type=ViewerConfig.OriginType.ASSET_BODY,
+                body_name="torso_link",
+            ))
         """
-        self._config.camera = CameraConfig(
-            position=position,
-            target=target,
-            fov=fov,
-            track_body_name=track_body_name,
-            mujoco_camera=mujoco_camera,
-        )
+        self._config.viewer = config
         return self
 
     def set_metadata(self, key: str, value: Any) -> SceneHandle:
@@ -278,4 +261,4 @@ class SceneHandle:
         return self
 
 
-__all__ = ["CameraConfig", "SceneConfig", "SceneHandle", "SplatConfig", "SplatHandle"]
+__all__ = ["ViewerConfig", "SceneConfig", "SceneHandle", "SplatConfig", "SplatHandle"]

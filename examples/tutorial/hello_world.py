@@ -35,9 +35,6 @@ def main():
     # Launch in browser
     app.launch()
 
-    print("✓ Builder example completed successfully!")
-    print(f"  - Projects: {len(builder.get_projects())}")
-
 
 if __name__ == "__main__":
     main()

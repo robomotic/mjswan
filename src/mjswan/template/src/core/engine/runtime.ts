@@ -15,11 +15,11 @@ import { createTendonState, updateTendonGeometry, updateTendonRendering } from '
 import { updateHeadlightFromCamera, updateLightsFromData } from '../scene/lights';
 import { threeToMjcCoordinate } from '../scene/coordinate';
 import {
-  type CameraConfig,
-  type CameraState,
-  applyCameraConfig,
+  type ViewerConfig,
+  type ViewerState,
+  applyViewerConfig,
   updateCameraFromData,
-} from './camera';
+} from './viewer_config';
 import { SceneCacheManager } from '../cache/sceneCacheManager';
 import { SceneResourceTracker } from '../cache/resourceTracker';
 import { MemoryMonitor } from '../cache/memoryMonitor';
@@ -120,7 +120,7 @@ export class mjswanRuntime {
   private vrButton: HTMLElement | null;
   private splatMesh: SplatMesh | null;
   private colliderMesh: THREE.Group | null;
-  private cameraState: CameraState;
+  private cameraState: ViewerState;
 
   constructor(mujoco: MainModule, container: HTMLElement, options: RuntimeOptions = {}) {
     this.mujoco = mujoco;
@@ -218,7 +218,7 @@ export class mjswanRuntime {
     this.onnxInferencing = false;
     this.splatMesh = null;
     this.colliderMesh = null;
-    this.cameraState = { trackBodyId: null, fixedCamIndex: null, prevBodyPos: null };
+    this.cameraState = { trackBodyId: null, prevBodyPos: null };
 
     // Initialize cache system (singleton shared across runtime instances)
     this.sceneCacheManager = SceneCacheManager.getInstance(this.mujoco);
@@ -230,7 +230,7 @@ export class mjswanRuntime {
     scenePath: string,
     policyConfigPath: string | null = null,
     splatConfig: SplatConfig | null = null,
-    cameraConfig: CameraConfig | null = null
+    cameraConfig: ViewerConfig | null = null
   ): Promise<void> {
     await this.stop();
 
@@ -292,7 +292,7 @@ export class mjswanRuntime {
 
     await this.loadPolicyConfig(policyConfigPath);
 
-    this.applyCameraConfig(cameraConfig);
+    this.applyViewerConfig(cameraConfig);
 
     this.running = true;
     void this.startLoop();
@@ -912,8 +912,8 @@ export class mjswanRuntime {
     }
   }
 
-  private applyCameraConfig(config: CameraConfig | null): void {
-    this.cameraState = applyCameraConfig(config, this.camera, this.controls, this.mjModel);
+  private applyViewerConfig(config: ViewerConfig | null): void {
+    this.cameraState = applyViewerConfig(config, this.camera, this.controls, this.mjModel);
   }
 
   private render = (): void => {
