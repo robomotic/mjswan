@@ -198,8 +198,8 @@ class Builder:
                                 else {}
                             ),
                             **(
-                                {"camera": scene.camera.to_dict()}
-                                if scene.camera and scene.camera.to_dict()
+                                {"camera": scene.viewer.to_dict()}
+                                if scene.viewer and scene.viewer.to_dict()
                                 else {}
                             ),
                             "policies": [

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { MjData, MjModel } from 'mujoco';
 import { mjcToThreeCoordinate } from '../scene/coordinate';
+import { VIEWER_CONFIG_DEFAULTS } from './viewer_config_defaults';
 
 export type ViewerConfig = {
   /** Look-at point in MuJoCo coordinates [x forward, y left, z up]. */
@@ -37,11 +38,6 @@ export type ViewerState = {
   prevBodyPos: THREE.Vector3 | null;
 };
 
-const DEFAULT_LOOKAT: [number, number, number] = [0.0, 0.0, 0.0];
-const DEFAULT_DISTANCE = 5.0;
-const DEFAULT_ELEVATION = -45.0;
-const DEFAULT_AZIMUTH = 90.0;
-const DEFAULT_FOV = 45;
 
 function computeCameraPosition(
   lookat: [number, number, number],
@@ -75,12 +71,12 @@ export function applyViewerConfig(
   const state: ViewerState = { trackBodyId: null, prevBodyPos: null };
   controls.enabled = true;
 
-  const lookat = config?.lookat ?? DEFAULT_LOOKAT;
-  const distance = config?.distance ?? DEFAULT_DISTANCE;
-  const elevation = config?.elevation ?? DEFAULT_ELEVATION;
-  const azimuth = config?.azimuth ?? DEFAULT_AZIMUTH;
+  const lookat = config?.lookat ?? VIEWER_CONFIG_DEFAULTS.lookat;
+  const distance = config?.distance ?? VIEWER_CONFIG_DEFAULTS.distance;
+  const elevation = config?.elevation ?? VIEWER_CONFIG_DEFAULTS.elevation;
+  const azimuth = config?.azimuth ?? VIEWER_CONFIG_DEFAULTS.azimuth;
 
-  camera.fov = config?.fovy ?? DEFAULT_FOV;
+  camera.fov = config?.fovy ?? VIEWER_CONFIG_DEFAULTS.fovy;
   camera.updateProjectionMatrix();
   camera.position.copy(computeCameraPosition(lookat, distance, elevation, azimuth));
   controls.target.copy(mjcToThreeCoordinate(lookat));

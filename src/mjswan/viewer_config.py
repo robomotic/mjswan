@@ -18,32 +18,32 @@ class ViewerConfig:
     lookat: tuple[float, float, float] = (0.0, 0.0, 0.0)
     """Look-at point in MuJoCo coordinates (x forward, y left, z up)."""
 
-    distance: float = 5.0
-    """Distance from the look-at point to the camera."""
+    distance: float = 4.0
+    """Distance from the look-at point to the viewer."""
 
     fovy: float | None = None
     """Vertical field of view in degrees. Defaults to 45."""
 
-    elevation: float = -45.0
-    """Camera elevation in degrees (negative = camera above the look-at point)."""
+    elevation: float = -30.0
+    """Viewer elevation in degrees (negative = viewer above the look-at point)."""
 
-    azimuth: float = 90.0
-    """Camera azimuth in degrees measured from the x-axis (forward) CCW."""
+    azimuth: float = 45.0
+    """Viewer azimuth in degrees measured from the x-axis (forward) CCW."""
 
     class OriginType(enum.Enum):
-        """The frame in which the camera position and target are defined."""
+        """The frame in which the viewer position and target are defined."""
 
         AUTO = enum.auto()
-        """Track the first non-fixed body, or fall back to a free camera."""
+        """Track the first non-fixed body, or fall back to a free viewer."""
         WORLD = enum.auto()
-        """Free camera at the configured lookat point."""
+        """Free viewer at the configured lookat point."""
         ASSET_ROOT = enum.auto()
         """Track the root body of the asset defined by entity_name."""
         ASSET_BODY = enum.auto()
         """Track the body defined by body_name in the asset defined by entity_name."""
 
     origin_type: OriginType = OriginType.AUTO
-    """How the camera origin is determined."""
+    """How the viewer origin is determined."""
 
     entity_name: str | None = None
     """Name of the asset/entity (unused in single-entity scenes)."""
@@ -99,13 +99,13 @@ class ViewerConfig:
         origin_type: "ViewerConfig.OriginType" = None,  # type: ignore[assignment]
         body_name: str | None = None,
     ) -> "ViewerConfig":
-        """Create a ViewerConfig from an explicit camera position and look-at target.
+        """Create a ViewerConfig from an explicit viewer position and look-at target.
 
         Computes lookat, distance, elevation, and azimuth from MuJoCo-coordinate
         position/target vectors.
 
         Args:
-            position: Camera position in MuJoCo coordinates (x forward, y left, z up).
+            position: Viewer position in MuJoCo coordinates (x forward, y left, z up).
             target: Look-at point in MuJoCo coordinates.
             fovy: Vertical field of view in degrees.
             origin_type: Tracking mode (defaults to ASSET_BODY if body_name given, else WORLD).

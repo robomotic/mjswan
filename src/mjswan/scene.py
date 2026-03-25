@@ -45,7 +45,7 @@ class SceneConfig:
     splat_section: bool = False
     """Show the Splat section in the control panel even when no splats are defined."""
 
-    camera: ViewerConfig | None = None
+    viewer: ViewerConfig | None = None
     """Optional viewer configuration for this scene."""
 
     @property
@@ -244,7 +244,7 @@ class SceneHandle:
                 body_name="torso_link",
             ))
         """
-        self._config.camera = config
+        self._config.viewer = config
         return self
 
     def set_metadata(self, key: str, value: Any) -> SceneHandle:
