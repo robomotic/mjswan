@@ -93,17 +93,18 @@ class ClientBuilder:
         except Exception as e:
             raise RuntimeError(f"Failed to create Node.js environment: {e}")
 
-    def install_dependencies(self) -> None:
+    def install_dependencies(self, clean: bool = False) -> None:
         npm_bin = self._get_npm_bin()
         package_lock = self.project_dir / "package-lock.json"
         node_modules = self.project_dir / "node_modules"
 
-        # In CI environments or cross-platform builds, npm ci can fail with optional dependencies
-        # Update lock file and node_modules to ensure clean install
-        if package_lock.exists():
-            package_lock.unlink()
-        if node_modules.exists():
-            shutil.rmtree(node_modules)
+        if clean:
+            # Force a fresh install by removing the lock file and node_modules.
+            # Useful when switching platforms or resolving corrupted installs.
+            if package_lock.exists():
+                package_lock.unlink()
+            if node_modules.exists():
+                shutil.rmtree(node_modules)
 
         print("Installing npm dependencies (npm install)...")
         subprocess.check_call([str(npm_bin), "install"], cwd=self.project_dir)
@@ -185,7 +186,7 @@ class ClientBuilder:
             self.create_env(clean=clean)
             self.sync_version_from_python()
             self.generate_viewer_config_defaults()
-            self.install_dependencies()
+            self.install_dependencies(clean=clean)
             env: dict[str, str] = {"MJSWAN_BASE_PATH": base_path}
             if gtm_id:
                 env["MJSWAN_GTM_ID"] = gtm_id

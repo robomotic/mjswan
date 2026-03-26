@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { MainModule, MjModel } from 'mujoco';
+import type { MainModule, MjModel } from '@mujoco/mujoco';
 
 interface CreateTextureParams {
   mujoco: MainModule;

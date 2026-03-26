@@ -1,4 +1,4 @@
-import type { MainModule, MjData, MjModel } from 'mujoco';
+import type { MainModule, MjData, MjModel } from '@mujoco/mujoco';
 
 export type PolicyRunnerContext = {
   mujoco: MainModule;

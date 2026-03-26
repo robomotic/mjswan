@@ -55,11 +55,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      'mujoco': path.resolve(__dirname, './src/mujoco/mujoco'),
     },
   },
   optimizeDeps: {
-    exclude: ['mujoco'],
+    exclude: ['@mujoco/mujoco'],
   },
   assetsInclude: ['**/*.wasm'],
   server: {
