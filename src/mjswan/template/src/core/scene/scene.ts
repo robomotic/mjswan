@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { MainModule, MjData, MjModel } from 'mujoco';
+import type { MainModule, MjData, MjModel } from '@mujoco/mujoco';
 import { mujocoAssetCollector } from '../utils/mujocoAssetCollector';
 import { normalizeScenePath } from '../utils/pathUtils';
 import { loadMjzFile } from '../utils/mjzLoader';
@@ -229,7 +229,12 @@ export async function loadSceneFromURL(
   let newModel: MjModel | null = null;
   try {
     if (modelPath.toLowerCase().endsWith('.mjb')) {
-      newModel = mujoco.MjModel.mj_loadModel(modelPath);
+      const vfs = new mujoco.MjVFS();
+      try {
+        newModel = mujoco.MjModel.mj_loadModel(modelPath, vfs);
+      } finally {
+        vfs.delete();
+      }
     } else {
       // TODO: Remove mjzLoader after mujoco wasm mj_loadXML() supports mjz format loading.
       if (modelPath.toLowerCase().endsWith('.mjz')) {

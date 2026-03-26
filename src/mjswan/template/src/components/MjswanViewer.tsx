@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { mjswanRuntime, WasmMemoryLimitError } from '../core/engine/runtime';
 import type { ViewerConfig } from '../core/engine/viewer_config';
 import type { SplatConfig } from '../core/scene/splat';
-import type { MainModule } from 'mujoco';
+import type { MainModule } from '@mujoco/mujoco';
 
 type MjswanViewerProps = {
   scenePath: string;
@@ -49,9 +49,7 @@ const MjswanViewer = ({
     const init = async () => {
       notify('Loading MuJoCo...');
       if (!mujocoRef.current) {
-        const baseWasmUrl = import.meta.env.BASE_URL || '/';
-        const modulePath = `${baseWasmUrl}assets/mujoco/mujoco.js`.replace(/\/+/g, '/');
-        const mujocoModule = await import(/* @vite-ignore */ modulePath);
+        const mujocoModule = await import('@mujoco/mujoco');
         mujocoRef.current = await mujocoModule.default();
       }
       if (cancelled) {

@@ -1,7 +1,7 @@
 // TODO: Remove this module after mujoco wasm mj_loadXML() supports mjz format loading.
 
 import JSZip from 'jszip';
-import type { MainModule } from 'mujoco';
+import type { MainModule } from '@mujoco/mujoco';
 
 export async function loadMjzFile(
     mujoco: MainModule,
