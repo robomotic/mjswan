@@ -25,6 +25,11 @@ gym_logger.set_level(_prev_gym_level)
 from robot_descriptions._descriptions import DESCRIPTIONS  # noqa: E402
 
 import mjswan  # noqa: E402
+from mjswan.envs.mdp import observations as obs_fns  # noqa: E402
+from mjswan.managers.observation_manager import (  # noqa: E402
+    ObservationGroupCfg,
+    ObservationTermCfg,
+)
 
 
 def _fix_unitree_mujoco_macos() -> None:
@@ -124,6 +129,25 @@ def setup_builder() -> mjswan.Builder:
         policy=onnx.load("assets/unitree_g1/locomotion.onnx"),
         name="Locomotion",
         config_path="assets/unitree_g1/locomotion.json",
+        observations={
+            "policy": ObservationGroupCfg(
+                terms={
+                    "base_lin_vel": ObservationTermCfg(func=obs_fns.base_lin_vel),
+                    "base_ang_vel": ObservationTermCfg(func=obs_fns.base_ang_vel),
+                    "projected_gravity": ObservationTermCfg(
+                        func=obs_fns.projected_gravity
+                    ),
+                    "joint_pos": ObservationTermCfg(
+                        func=obs_fns.joint_pos_rel, params={"pos_steps": [0]}
+                    ),
+                    "joint_vel": ObservationTermCfg(func=obs_fns.joint_vel_rel),
+                    "last_action": ObservationTermCfg(func=obs_fns.last_action),
+                    "velocity_cmd": ObservationTermCfg(
+                        func=obs_fns.simple_velocity_command
+                    ),
+                }
+            )
+        },
     )
     g1_loco_policy.add_velocity_command(
         lin_vel_x=(-1.5, 1.5),
@@ -135,6 +159,29 @@ def setup_builder() -> mjswan.Builder:
         policy=onnx.load("assets/unitree_g1/balance.onnx"),
         name="Balance",
         config_path="assets/unitree_g1/balance.json",
+        observations={
+            "observation": ObservationGroupCfg(
+                terms={
+                    "base_ang_vel": ObservationTermCfg(
+                        func=obs_fns.base_ang_vel, history_length=1
+                    ),
+                    "projected_gravity": ObservationTermCfg(
+                        func=obs_fns.projected_gravity_isaac,
+                        history_length=1,
+                        params={"gravity": [0, 0, -1.0]},
+                    ),
+                    "joint_pos": ObservationTermCfg(
+                        func=obs_fns.joint_positions_isaac, history_length=1
+                    ),
+                    "joint_vel": ObservationTermCfg(
+                        func=obs_fns.joint_vel_rel,
+                        params={"joint_names": "isaac"},
+                        history_length=1,
+                    ),
+                    "prev_actions": ObservationTermCfg(func=obs_fns.previous_actions),
+                }
+            )
+        },
     )
 
     # 1.B. Unitree Go2
@@ -155,16 +202,77 @@ def setup_builder() -> mjswan.Builder:
         policy=onnx.load("assets/unitree_go2/facet.onnx"),
         name="Facet",
         config_path="assets/unitree_go2/facet.json",
+        observations={
+            "policy": ObservationGroupCfg(
+                terms={
+                    "projected_gravity": ObservationTermCfg(
+                        func=obs_fns.projected_gravity_isaac, history_length=3
+                    ),
+                    "joint_pos": ObservationTermCfg(
+                        func=obs_fns.joint_positions_isaac,
+                        history_length=3,
+                        params={"subtract_default": False},
+                    ),
+                    "joint_vel": ObservationTermCfg(
+                        func=obs_fns.joint_vel_rel,
+                        params={"joint_names": "isaac"},
+                        history_length=3,
+                    ),
+                    "prev_actions": ObservationTermCfg(
+                        func=obs_fns.previous_actions,
+                        history_length=3,
+                        params={"transpose": True},
+                    ),
+                }
+            ),
+            "command": ObservationGroupCfg(
+                terms={
+                    "impedance_cmd": ObservationTermCfg(func=obs_fns.impedance_command),
+                }
+            ),
+        },
     ).add_velocity_command()
+
+    _go2_velocity_obs = {
+        "policy": ObservationGroupCfg(
+            terms={
+                "projected_gravity": ObservationTermCfg(
+                    func=obs_fns.projected_gravity_isaac, history_length=3
+                ),
+                "joint_pos": ObservationTermCfg(
+                    func=obs_fns.joint_positions_isaac, history_length=3
+                ),
+                "joint_vel": ObservationTermCfg(
+                    func=obs_fns.joint_vel_rel,
+                    params={"joint_names": "isaac"},
+                    history_length=3,
+                ),
+                "prev_actions": ObservationTermCfg(
+                    func=obs_fns.previous_actions,
+                    history_length=3,
+                    params={"transpose": True},
+                ),
+            }
+        ),
+        "command_": ObservationGroupCfg(
+            terms={
+                "velocity_cmd": ObservationTermCfg(
+                    func=obs_fns.velocity_command_with_oscillators
+                ),
+            }
+        ),
+    }
     go2_scene.add_policy(
         policy=onnx.load("assets/unitree_go2/vanilla.onnx"),
         name="Vanilla",
         config_path="assets/unitree_go2/vanilla.json",
+        observations=_go2_velocity_obs,
     ).add_velocity_command()
     go2_scene.add_policy(
         policy=onnx.load("assets/unitree_go2/robust.onnx"),
         name="Robust",
         config_path="assets/unitree_go2/robust.json",
+        observations=_go2_velocity_obs,
     ).add_velocity_command()
 
     # 1.C. Unitree Go1
@@ -181,6 +289,8 @@ def setup_builder() -> mjswan.Builder:
             body_name="trunk",
         )
     )
+    # NOTE: himloco uses an interleaved history format (dict with "interleaved": true)
+    # that is not yet expressible via ObservationGroupCfg. obs_config remains in himloco.json.
     go1_scene.add_policy(
         policy=onnx.load("assets/unitree_go1/himloco.onnx"),
         name="HiMLoco",
@@ -190,6 +300,29 @@ def setup_builder() -> mjswan.Builder:
         policy=onnx.load("assets/unitree_go1/decap.onnx"),
         name="Decap",
         config_path="assets/unitree_go1/decap.json",
+        observations={
+            "obs_history": ObservationGroupCfg(
+                terms={
+                    "projected_gravity": ObservationTermCfg(
+                        func=obs_fns.projected_gravity_isaac, history_length=1
+                    ),
+                    "velocity_cmd": ObservationTermCfg(
+                        func=obs_fns.simple_velocity_command,
+                        scale=(2.0, 2.0, 0.25),
+                    ),
+                    "joint_pos": ObservationTermCfg(
+                        func=obs_fns.joint_positions_isaac, history_length=1
+                    ),
+                    "joint_vel": ObservationTermCfg(
+                        func=obs_fns.joint_vel_rel,
+                        params={"joint_names": "isaac"},
+                        scale=0.05,
+                        history_length=1,
+                    ),
+                    "prev_actions": ObservationTermCfg(func=obs_fns.previous_actions),
+                }
+            )
+        },
     ).add_velocity_command()
 
     # ==============================
@@ -209,6 +342,25 @@ def setup_builder() -> mjswan.Builder:
             "assets/anymal_c_velocity/Mjlab-Velocity-Flat-Anymal-C.3000.onnx"
         ),
         config_path="assets/anymal_c_velocity/Mjlab-Velocity-Flat-Anymal-C.3000.json",
+        observations={
+            "obs": ObservationGroupCfg(
+                terms={
+                    "base_lin_vel": ObservationTermCfg(func=obs_fns.base_lin_vel),
+                    "base_ang_vel": ObservationTermCfg(func=obs_fns.base_ang_vel),
+                    "projected_gravity": ObservationTermCfg(
+                        func=obs_fns.projected_gravity
+                    ),
+                    "joint_pos": ObservationTermCfg(
+                        func=obs_fns.joint_pos_rel, params={"pos_steps": [0]}
+                    ),
+                    "joint_vel": ObservationTermCfg(func=obs_fns.joint_vel_rel),
+                    "last_action": ObservationTermCfg(func=obs_fns.last_action),
+                    "velocity_cmd": ObservationTermCfg(
+                        func=obs_fns.simple_velocity_command
+                    ),
+                }
+            )
+        },
     ).add_velocity_command(
         lin_vel_x=(-1.0, 1.0),
         lin_vel_y=(-1.0, 1.0),

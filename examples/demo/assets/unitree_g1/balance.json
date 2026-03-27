@@ -73,42 +73,6 @@
     },
     "path": "policy/g1/balance.onnx"
   },
-  "obs_config": {
-    "observation": [
-      {
-        "name": "BaseAngularVelocity",
-        "history_steps": 1,
-        "_comment": "3 dims: [wx, wy, wz] in base frame"
-      },
-      {
-        "name": "ProjectedGravity",
-        "joint_name": "floating_base_joint",
-        "history_steps": 1,
-        "gravity": [0, 0, -1.0],
-        "_comment": "3 dims: [gx, gy, gz] gravity projected to base frame"
-      },
-      {
-        "name": "JointPositions",
-        "joint_names": "isaac",
-        "scale": 1.0,
-        "subtract_default": true,
-        "history_steps": 1,
-        "_comment": "29 dims: joint positions relative to default pose"
-      },
-      {
-        "name": "JointVelocities",
-        "joint_names": "isaac",
-        "scale": 1.0,
-        "history_steps": 1,
-        "_comment": "29 dims: joint velocities"
-      },
-      {
-        "name": "PreviousActions",
-        "history_steps": 1,
-        "_comment": "29 dims: previous action taken"
-      }
-    ]
-  },
   "action_scale": [
     0.5475464629911068,
     0.35066146637882434,

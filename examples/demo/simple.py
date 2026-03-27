@@ -11,6 +11,8 @@ import mujoco
 import onnx
 
 import mjswan
+from mjswan.envs.mdp import observations as obs_fns
+from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 
 
 def setup_builder() -> mjswan.Builder:
@@ -47,6 +49,25 @@ def setup_builder() -> mjswan.Builder:
         policy=onnx.load("assets/unitree_g1/locomotion.onnx"),
         name="Locomotion",
         config_path="assets/unitree_g1/locomotion.json",
+        observations={
+            "policy": ObservationGroupCfg(
+                terms={
+                    "base_lin_vel": ObservationTermCfg(func=obs_fns.base_lin_vel),
+                    "base_ang_vel": ObservationTermCfg(func=obs_fns.base_ang_vel),
+                    "projected_gravity": ObservationTermCfg(
+                        func=obs_fns.projected_gravity
+                    ),
+                    "joint_pos": ObservationTermCfg(
+                        func=obs_fns.joint_pos_rel, params={"pos_steps": [0]}
+                    ),
+                    "joint_vel": ObservationTermCfg(func=obs_fns.joint_vel_rel),
+                    "last_action": ObservationTermCfg(func=obs_fns.last_action),
+                    "velocity_cmd": ObservationTermCfg(
+                        func=obs_fns.simple_velocity_command
+                    ),
+                }
+            )
+        },
     ).add_velocity_command(
         lin_vel_x=(-2.0, 2.0),
         lin_vel_y=(-0.5, 0.5),

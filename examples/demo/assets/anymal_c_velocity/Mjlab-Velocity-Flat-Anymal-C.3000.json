@@ -27,38 +27,6 @@
     -0.4,
     0.8
   ],
-  "obs_config": {
-    "obs": [
-      {
-        "name": "BaseLinearVelocity",
-        "world_frame": false
-      },
-      {
-        "name": "BaseAngularVelocity"
-      },
-      {
-        "name": "ProjectedGravityB"
-      },
-      {
-        "name": "JointPos",
-        "pos_steps": [
-          0
-        ],
-        "subtract_default": true,
-        "scale": 1.0
-      },
-      {
-        "name": "JointVelocities"
-      },
-      {
-        "name": "PrevActions",
-        "history_steps": 1
-      },
-      {
-        "name": "SimpleVelocityCommand"
-      }
-    ]
-  },
   "action_scale": [
     1.013,
     1.013,

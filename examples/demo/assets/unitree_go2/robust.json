@@ -64,40 +64,6 @@
     },
     "path": "policy/go2/robust.onnx"
   },
-  "obs_config": {
-    "policy": [
-      {
-        "name": "ProjectedGravity",
-        "joint_name": "floating_base_joint",
-        "history_steps": 3,
-        "_comment": "9 dims (3x3): gravity in base frame with 3-step history"
-      },
-      {
-        "name": "JointPositions",
-        "joint_names": "isaac",
-        "history_steps": 3,
-        "_comment": "36 dims (12x3): joint positions with 3-step history"
-      },
-      {
-        "name": "JointVelocities",
-        "joint_names": "isaac",
-        "history_steps": 3,
-        "_comment": "36 dims (12x3): joint velocities with 3-step history"
-      },
-      {
-        "name": "PreviousActions",
-        "history_steps": 3,
-        "transpose": true,
-        "_comment": "36 dims (12x3): previous actions with 3-step history"
-      }
-    ],
-    "command_": [
-      {
-        "name": "VelocityCommandWithOscillators",
-        "_comment": "16 dims: velocity command (3) + padding (1) + oscillators (12)"
-      }
-    ]
-  },
   "action_scale": 0.5,
   "stiffness": 25.0,
   "damping": 0.5

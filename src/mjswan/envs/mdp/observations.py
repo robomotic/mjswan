@@ -99,6 +99,47 @@ mjlab: ``env.command_manager.get_command(command_name)``
 """
 
 # ---------------------------------------------------------------------------
+# Modern Isaac-compatible implementations
+# ---------------------------------------------------------------------------
+
+projected_gravity_isaac = ObsFunc(
+    "ProjectedGravity", {"joint_name": "floating_base_joint"}
+)
+"""Gravity vector projected into the base frame (Isaac-compatible implementation).
+
+Uses ``floating_base_joint`` frame by default.
+Pass ``gravity`` via ``params`` to override the gravity vector.
+mjlab: ``asset.data.projected_gravity_b``
+"""
+
+joint_positions_isaac = ObsFunc(
+    "JointPositions", {"joint_names": "isaac", "subtract_default": True}
+)
+"""Joint positions with Isaac joint ordering, relative to the default pose.
+
+mjlab: ``asset.data.joint_pos - asset.data.default_joint_pos``
+"""
+
+previous_actions = ObsFunc("PreviousActions", {"history_steps": 1})
+"""Most recent action tensor (Isaac-compatible implementation).
+
+mjlab: ``env.action_manager.action``
+"""
+
+# ---------------------------------------------------------------------------
+# Command observations
+# ---------------------------------------------------------------------------
+
+simple_velocity_command = ObsFunc("SimpleVelocityCommand")
+"""(lin_vel_x, lin_vel_y, ang_vel_z) velocity command as an observation term."""
+
+velocity_command_with_oscillators = ObsFunc("VelocityCommandWithOscillators")
+"""Velocity command augmented with oscillator signals (16 dims)."""
+
+impedance_command = ObsFunc("ImpedanceCommand")
+"""Impedance control command as an observation term."""
+
+# ---------------------------------------------------------------------------
 # Sensors (not supported in browser)
 # ---------------------------------------------------------------------------
 
@@ -143,6 +184,12 @@ __all__ = [
     "joint_vel_rel",
     "last_action",
     "generated_commands",
+    "projected_gravity_isaac",
+    "joint_positions_isaac",
+    "previous_actions",
+    "simple_velocity_command",
+    "velocity_command_with_oscillators",
+    "impedance_command",
     "builtin_sensor",
     "height_scan",
 ]

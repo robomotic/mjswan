@@ -43,14 +43,32 @@ scene.add_policy(
     policy=model,
     config_path=go2_cfg,
     observations={
-        "monitor": ObservationGroupCfg(
+        "policy": ObservationGroupCfg(
             terms={
-                "base_lin_vel": ObservationTermCfg(func=obs_fns.base_lin_vel),
-                "base_ang_vel": ObservationTermCfg(func=obs_fns.base_ang_vel),
-                "projected_gravity": ObservationTermCfg(func=obs_fns.projected_gravity),
-                "joint_pos": ObservationTermCfg(func=obs_fns.joint_pos_rel, scale=0.5),
-                "joint_vel": ObservationTermCfg(func=obs_fns.joint_vel_rel),
+                "projected_gravity": ObservationTermCfg(
+                    func=obs_fns.projected_gravity_isaac, history_length=3
+                ),
+                "joint_pos": ObservationTermCfg(
+                    func=obs_fns.joint_positions_isaac, history_length=3
+                ),
+                "joint_vel": ObservationTermCfg(
+                    func=obs_fns.joint_vel_rel,
+                    params={"joint_names": "isaac"},
+                    history_length=3,
+                ),
+                "prev_actions": ObservationTermCfg(
+                    func=obs_fns.previous_actions,
+                    history_length=3,
+                    params={"transpose": True},
+                ),
             },
+        ),
+        "command_": ObservationGroupCfg(
+            terms={
+                "velocity_cmd": ObservationTermCfg(
+                    func=obs_fns.velocity_command_with_oscillators
+                ),
+            }
         ),
     },
 ).add_velocity_command()

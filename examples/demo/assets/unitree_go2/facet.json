@@ -65,38 +65,6 @@
     },
     "path": "policy/go2/facet.onnx"
   },
-  "obs_config": {
-    "policy": [
-      {
-        "name": "ProjectedGravity",
-        "joint_name": "floating_base_joint",
-        "history_steps": 3
-      },
-      {
-        "name": "JointPositions",
-        "joint_names": "isaac",
-        "history_steps": 3,
-        "subtract_default": false,
-        "scale": 1.0
-      },
-      {
-        "name": "JointVelocities",
-        "joint_names": "isaac",
-        "history_steps": 3,
-        "scale": 1.0
-      },
-      {
-        "name": "PreviousActions",
-        "history_steps": 3,
-        "transpose": true
-      }
-    ],
-    "command": [
-      {
-        "name": "ImpedanceCommand"
-      }
-    ]
-  },
   "action_scale": 0.5,
   "stiffness": 25.0,
   "damping": 0.5
