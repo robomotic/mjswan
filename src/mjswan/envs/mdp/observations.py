@@ -28,10 +28,14 @@ class ObsFunc:
             ``Observations`` registry (e.g. ``"BaseLinearVelocity"``).
         defaults: Default parameters merged into the JSON config entry.
             These map mjlab semantics to the existing TS class API.
+        unsupported_reason: If set, this sentinel is accepted for API
+            compatibility but raises ``NotImplementedError`` at build time
+            with this message.
     """
 
     ts_name: str
     defaults: dict = field(default_factory=dict)
+    unsupported_reason: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +98,41 @@ Requires ``params={"command_name": "<name>"}``.
 mjlab: ``env.command_manager.get_command(command_name)``
 """
 
+# ---------------------------------------------------------------------------
+# Sensors (not supported in browser)
+# ---------------------------------------------------------------------------
+
+builtin_sensor = ObsFunc(
+    ts_name="",
+    unsupported_reason=(
+        "builtin_sensor is not supported in mjswan: direct MuJoCo sensordata "
+        "slice access is not available in the browser runtime. "
+        "Consider reading the sensor value via the policy state instead."
+    ),
+)
+"""Raw data from a named BuiltinSensor.
+
+.. note::
+    Not supported in mjswan. Accepted for API compatibility so that mjlab
+    configs can be imported without modification, but raises
+    ``NotImplementedError`` at build time.
+"""
+
+height_scan = ObsFunc(
+    ts_name="",
+    unsupported_reason=(
+        "height_scan is not supported in mjswan: RayCastSensor is not "
+        "available in the browser runtime."
+    ),
+)
+"""Height scan from a RayCastSensor.
+
+.. note::
+    Not supported in mjswan. Accepted for API compatibility so that mjlab
+    configs can be imported without modification, but raises
+    ``NotImplementedError`` at build time.
+"""
+
 
 __all__ = [
     "ObsFunc",
@@ -104,4 +143,6 @@ __all__ = [
     "joint_vel_rel",
     "last_action",
     "generated_commands",
+    "builtin_sensor",
+    "height_scan",
 ]

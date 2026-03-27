@@ -90,6 +90,9 @@ class ObservationTermCfg:
 
             {"name": "BaseLinearVelocity", "scale": 0.5, "history_steps": 3, ...}
         """
+        if self.func.unsupported_reason is not None:
+            raise NotImplementedError(self.func.unsupported_reason)
+
         entry: dict[str, Any] = {"name": self.func.ts_name}
 
         # Merge function defaults with explicit params
