@@ -185,29 +185,8 @@ _G1_JOINT_DAMPING = {
 # fmt: on
 
 
-def setup_builder() -> mjswan.Builder:
-    """Set up and return the builder with all demo projects configured.
-
-    This function creates the builder and adds all projects, scenes, and policies
-    but does not build or launch the application. Useful for testing.
-
-    Returns:
-        Configured Builder instance ready to be built.
-    """
-    _fix_unitree_mujoco_macos()
-    # Ensure asset-relative paths resolve regardless of current working directory.
-    os.chdir(Path(__file__).resolve().parent)
-    base_path = os.getenv("MJSWAN_BASE_PATH", "/")
-    builder = mjswan.Builder(base_path=base_path, gtm_id="GTM-W79HQ38W")
-
-    # =======================
-    # 1. mjswan Demo Project
-    # =======================
-
-    demo_project = builder.add_project(name="mjswan Demo")
-
-    # 1.A. Unitree G1
-    g1_scene = demo_project.add_scene(
+def _add_g1_scene(project) -> None:
+    g1_scene = project.add_scene(
         spec=mujoco.MjSpec.from_file("assets/unitree_g1/scene.xml"),
         name="G1",
     ).set_viewer_config(
@@ -228,25 +207,29 @@ def setup_builder() -> mjswan.Builder:
         yaw=40,
         control=True,
     )
+
+    g1_actions = {
+        "joint_pos": JointPositionActionCfg(
+            scale=_G1_JOINT_SCALE,
+            stiffness=_G1_JOINT_STIFFNESS,
+            damping=_G1_JOINT_DAMPING,
+        )
+    }
+    g1_terminations = {
+        "bad_orientation": TerminationTermCfg(
+            func=term_fns.bad_orientation, params={"limit_angle": 1.0}
+        ),
+        "root_height_below_minimum": TerminationTermCfg(
+            func=term_fns.root_height_below_minimum, params={"minimum_height": 0.3}
+        ),
+    }
+
     g1_loco_policy = g1_scene.add_policy(
         policy=onnx.load("assets/unitree_g1/locomotion.onnx"),
         name="Locomotion",
         config_path="assets/unitree_g1/locomotion.json",
-        actions={
-            "joint_pos": JointPositionActionCfg(
-                scale=_G1_JOINT_SCALE,
-                stiffness=_G1_JOINT_STIFFNESS,
-                damping=_G1_JOINT_DAMPING,
-            ),
-        },
-        terminations={
-            "bad_orientation": TerminationTermCfg(
-                func=term_fns.bad_orientation, params={"limit_angle": 1.0}
-            ),
-            "root_height_below_minimum": TerminationTermCfg(
-                func=term_fns.root_height_below_minimum, params={"minimum_height": 0.3}
-            ),
-        },
+        actions=g1_actions,
+        terminations=g1_terminations,
         observations={
             "policy": ObservationGroupCfg(
                 terms={
@@ -261,7 +244,8 @@ def setup_builder() -> mjswan.Builder:
                     "joint_vel": ObservationTermCfg(func=obs_fns.joint_vel_rel),
                     "last_action": ObservationTermCfg(func=obs_fns.last_action),
                     "velocity_cmd": ObservationTermCfg(
-                        func=obs_fns.simple_velocity_command
+                        func=obs_fns.generated_commands,
+                        params={"command_name": "velocity"},
                     ),
                 }
             )
@@ -273,25 +257,13 @@ def setup_builder() -> mjswan.Builder:
         default_lin_vel_x=0.5,
         default_lin_vel_y=0.0,
     )
+
     g1_scene.add_policy(
         policy=onnx.load("assets/unitree_g1/balance.onnx"),
         name="Balance",
         config_path="assets/unitree_g1/balance.json",
-        actions={
-            "joint_pos": JointPositionActionCfg(
-                scale=_G1_JOINT_SCALE,
-                stiffness=_G1_JOINT_STIFFNESS,
-                damping=_G1_JOINT_DAMPING,
-            ),
-        },
-        terminations={
-            "bad_orientation": TerminationTermCfg(
-                func=term_fns.bad_orientation, params={"limit_angle": 1.0}
-            ),
-            "root_height_below_minimum": TerminationTermCfg(
-                func=term_fns.root_height_below_minimum, params={"minimum_height": 0.3}
-            ),
-        },
+        actions=g1_actions,
+        terminations=g1_terminations,
         observations={
             "observation": ObservationGroupCfg(
                 terms={
@@ -317,8 +289,9 @@ def setup_builder() -> mjswan.Builder:
         },
     )
 
-    # 1.B. Unitree Go2
-    go2_scene = demo_project.add_scene(
+
+def _add_go2_scene(project) -> None:
+    go2_scene = project.add_scene(
         name="Go2",
         spec=mujoco.MjSpec.from_file("assets/unitree_go2/scene.xml"),
     ).set_viewer_config(
@@ -331,17 +304,49 @@ def setup_builder() -> mjswan.Builder:
             body_name="base",
         )
     )
+
+    go2_actions = {
+        "joint_pos": JointPositionActionCfg(
+            scale=0.5,
+            stiffness=25.0,
+            damping=0.5,
+        )
+    }
+    go2_velocity_obs = {
+        "policy": ObservationGroupCfg(
+            terms={
+                "projected_gravity": ObservationTermCfg(
+                    func=obs_fns.projected_gravity_isaac, history_length=3
+                ),
+                "joint_pos": ObservationTermCfg(
+                    func=obs_fns.joint_positions_isaac, history_length=3
+                ),
+                "joint_vel": ObservationTermCfg(
+                    func=obs_fns.joint_vel_rel,
+                    params={"joint_names": "isaac"},
+                    history_length=3,
+                ),
+                "prev_actions": ObservationTermCfg(
+                    func=obs_fns.previous_actions,
+                    history_length=3,
+                    params={"transpose": True},
+                ),
+            }
+        ),
+        "command_": ObservationGroupCfg(
+            terms={
+                "velocity_cmd": ObservationTermCfg(
+                    func=obs_fns.velocity_command_with_oscillators
+                ),
+            }
+        ),
+    }
+
     go2_scene.add_policy(
         name="Facet",
         policy=onnx.load("assets/unitree_go2/facet.onnx"),
         config_path="assets/unitree_go2/facet.json",
-        actions={
-            "joint_pos": JointPositionActionCfg(
-                scale=0.5,
-                stiffness=25.0,
-                damping=0.5,
-            ),
-        },
+        actions=go2_actions,
         observations={
             "policy": ObservationGroupCfg(
                 terms={
@@ -373,64 +378,25 @@ def setup_builder() -> mjswan.Builder:
         },
     ).add_velocity_command()
 
-    _go2_velocity_obs = {
-        "policy": ObservationGroupCfg(
-            terms={
-                "projected_gravity": ObservationTermCfg(
-                    func=obs_fns.projected_gravity_isaac, history_length=3
-                ),
-                "joint_pos": ObservationTermCfg(
-                    func=obs_fns.joint_positions_isaac, history_length=3
-                ),
-                "joint_vel": ObservationTermCfg(
-                    func=obs_fns.joint_vel_rel,
-                    params={"joint_names": "isaac"},
-                    history_length=3,
-                ),
-                "prev_actions": ObservationTermCfg(
-                    func=obs_fns.previous_actions,
-                    history_length=3,
-                    params={"transpose": True},
-                ),
-            }
-        ),
-        "command_": ObservationGroupCfg(
-            terms={
-                "velocity_cmd": ObservationTermCfg(
-                    func=obs_fns.velocity_command_with_oscillators
-                ),
-            }
-        ),
-    }
     go2_scene.add_policy(
         policy=onnx.load("assets/unitree_go2/vanilla.onnx"),
         name="Vanilla",
         config_path="assets/unitree_go2/vanilla.json",
-        actions={
-            "joint_pos": JointPositionActionCfg(
-                scale=0.5,
-                stiffness=25.0,
-                damping=0.5,
-            ),
-        },
-        observations=_go2_velocity_obs,
+        actions=go2_actions,
+        observations=go2_velocity_obs,
     ).add_velocity_command()
+
     go2_scene.add_policy(
         policy=onnx.load("assets/unitree_go2/robust.onnx"),
         name="Robust",
         config_path="assets/unitree_go2/robust.json",
-        actions={
-            "joint_pos": JointPositionActionCfg(
-                scale=0.5,
-                stiffness=25.0,
-                damping=0.5,
-            ),
-        },
-        observations=_go2_velocity_obs,
+        actions=go2_actions,
+        observations=go2_velocity_obs,
     ).add_velocity_command()
 
-    # 1.C. Unitree Go1
-    go1_scene = demo_project.add_scene(
+
+def _add_go1_scene(project) -> None:
+    go1_scene = project.add_scene(
         spec=mujoco.MjSpec.from_file("assets/unitree_go1/go1.xml"),
         name="Go1",
     ).set_viewer_config(
@@ -443,33 +409,33 @@ def setup_builder() -> mjswan.Builder:
             body_name="trunk",
         )
     )
+
     # NOTE: himloco uses an interleaved history format (dict with "interleaved": true)
     # that is not yet expressible via ObservationGroupCfg. observations remains in himloco.json.
-    _go1_himloco_actions = {
-        "joint_pos": JointPositionActionCfg(
-            scale=0.25,
-            stiffness=40.0,
-            damping=1.0,
-        ),
-    }
     go1_scene.add_policy(
         policy=onnx.load("assets/unitree_go1/himloco.onnx"),
         name="HiMLoco",
         config_path="assets/unitree_go1/himloco.json",
-        actions=_go1_himloco_actions,
+        actions={
+            "joint_pos": JointPositionActionCfg(
+                scale=0.25,
+                stiffness=40.0,
+                damping=1.0,
+            )
+        },
     ).add_velocity_command()
-    _go1_decap_actions = {
-        "effort": JointEffortActionCfg(
-            scale=8.0,
-            stiffness=20.0,
-            damping=0.5,
-        ),
-    }
+
     go1_scene.add_policy(
         policy=onnx.load("assets/unitree_go1/decap.onnx"),
         name="Decap",
         config_path="assets/unitree_go1/decap.json",
-        actions=_go1_decap_actions,
+        actions={
+            "effort": JointEffortActionCfg(
+                scale=8.0,
+                stiffness=20.0,
+                damping=0.5,
+            )
+        },
         observations={
             "obs_history": ObservationGroupCfg(
                 terms={
@@ -477,7 +443,8 @@ def setup_builder() -> mjswan.Builder:
                         func=obs_fns.projected_gravity_isaac, history_length=1
                     ),
                     "velocity_cmd": ObservationTermCfg(
-                        func=obs_fns.simple_velocity_command,
+                        func=obs_fns.generated_commands,
+                        params={"command_name": "velocity"},
                         scale=(2.0, 2.0, 0.25),
                     ),
                     "joint_pos": ObservationTermCfg(
@@ -495,31 +462,25 @@ def setup_builder() -> mjswan.Builder:
         },
     ).add_velocity_command()
 
-    # ==============================
-    # 2. Robot Descriptions Project
-    # ==============================
 
-    robotdesc_project = builder.add_project(name="Robot Descriptions", id="robotdesc")
-
-    # ANYmal C Velocity from https://github.com/mujocolab/anymal_c_velocity
-    anymal_c_scene = robotdesc_project.add_scene(
+def _add_anymal_c_scene(project) -> None:
+    anymal_c_scene = project.add_scene(
         name="ANYmal C Velocity",
         spec=mujoco.MjSpec.from_zip("assets/anymal_c_velocity/scene.mjz"),
     )
-    _anymal_c_actions = {
-        "joint_pos": JointPositionActionCfg(
-            scale=1.013,
-            stiffness=19.739,
-            damping=1.257,
-        ),
-    }
     anymal_c_scene.add_policy(
         name="velocity 3000 iters",
         policy=onnx.load(
             "assets/anymal_c_velocity/Mjlab-Velocity-Flat-Anymal-C.3000.onnx"
         ),
         config_path="assets/anymal_c_velocity/Mjlab-Velocity-Flat-Anymal-C.3000.json",
-        actions=_anymal_c_actions,
+        actions={
+            "joint_pos": JointPositionActionCfg(
+                scale=1.013,
+                stiffness=19.739,
+                damping=1.257,
+            )
+        },
         observations={
             "obs": ObservationGroupCfg(
                 terms={
@@ -534,7 +495,8 @@ def setup_builder() -> mjswan.Builder:
                     "joint_vel": ObservationTermCfg(func=obs_fns.joint_vel_rel),
                     "last_action": ObservationTermCfg(func=obs_fns.last_action),
                     "velocity_cmd": ObservationTermCfg(
-                        func=obs_fns.simple_velocity_command
+                        func=obs_fns.generated_commands,
+                        params={"command_name": "velocity"},
                     ),
                 }
             )
@@ -547,6 +509,20 @@ def setup_builder() -> mjswan.Builder:
         default_lin_vel_y=0.0,
         default_ang_vel_z=0.0,
     )
+
+
+def _add_mjswan_demo_project(builder: mjswan.Builder) -> None:
+    project = builder.add_project(name="mjswan Demo")
+    _add_g1_scene(project)
+    _add_go2_scene(project)
+    _add_go1_scene(project)
+
+
+def _add_robot_descriptions_project(builder: mjswan.Builder) -> None:
+    project = builder.add_project(name="Robot Descriptions", id="robotdesc")
+
+    # ANYmal C Velocity from https://github.com/mujocolab/anymal_c_velocity
+    _add_anymal_c_scene(project)
 
     def _rd_spec(module_name: str) -> mujoco.MjSpec:
         from importlib import import_module
@@ -562,14 +538,11 @@ def setup_builder() -> mjswan.Builder:
         if desc.has_mjcf:
             scene_name = module.replace("_mj_description", "")
             scene_name = " ".join([word.capitalize() for word in scene_name.split("_")])
+            project.add_scene(name=scene_name, spec=_rd_spec(module))
 
-            robotdesc_project.add_scene(name=scene_name, spec=_rd_spec(module))
 
-    # =============================
-    # 3. MuJoCo Playground Project
-    # =============================
-
-    playground_project = builder.add_project(name="MuJoCo Playground", id="playground")
+def _add_playground_project(builder: mjswan.Builder) -> None:
+    project = builder.add_project(name="MuJoCo Playground", id="playground")
 
     for env_name in registry.ALL_ENVS:
         if "Sparse" in env_name:
@@ -603,13 +576,11 @@ def setup_builder() -> mjswan.Builder:
         for hfield in spec.hfields:
             _add("", hfield.file)
 
-        playground_project.add_scene(name=env_name, spec=spec)
+        project.add_scene(name=env_name, spec=spec)
 
-    # ====================
-    # 4. MyoSuite Project
-    # ====================
 
-    myosuite_project = builder.add_project(name="MyoSuite", id="myosuite")
+def _add_myosuite_project(builder: mjswan.Builder) -> None:
+    project = builder.add_project(name="MyoSuite", id="myosuite")
 
     registry_specs = gym_registry_specs()
 
@@ -682,7 +653,7 @@ def setup_builder() -> mjswan.Builder:
     ) in target_envs.items():
         model_path = registry_specs[env_name].kwargs["model_path"]
         mjspec = mujoco.MjSpec.from_file(model_path)
-        myosuite_project.add_scene(name=display_name, spec=mjspec).set_viewer_config(
+        project.add_scene(name=display_name, spec=mjspec).set_viewer_config(
             mjswan.ViewerConfig(
                 lookat=lookat,
                 distance=distance,
@@ -691,6 +662,27 @@ def setup_builder() -> mjswan.Builder:
                 origin_type=mjswan.ViewerConfig.OriginType.WORLD,
             )
         )
+
+
+def setup_builder() -> mjswan.Builder:
+    """Set up and return the builder with all demo projects configured.
+
+    This function creates the builder and adds all projects, scenes, and policies
+    but does not build or launch the application. Useful for testing.
+
+    Returns:
+        Configured Builder instance ready to be built.
+    """
+    _fix_unitree_mujoco_macos()
+    # Ensure asset-relative paths resolve regardless of current working directory.
+    os.chdir(Path(__file__).resolve().parent)
+    base_path = os.getenv("MJSWAN_BASE_PATH", "/")
+    builder = mjswan.Builder(base_path=base_path, gtm_id="GTM-W79HQ38W")
+
+    _add_mjswan_demo_project(builder)
+    _add_robot_descriptions_project(builder)
+    _add_playground_project(builder)
+    _add_myosuite_project(builder)
 
     return builder
 
@@ -726,7 +718,7 @@ def _copy_licenses(output_dir: Path) -> None:
     # Project-level for myosuite and mujoco_playground
     for project_id, pkg_name in [
         ("myosuite", "myosuite"),
-        ("playground", "mujoco_playground"),
+        ("playground", "playground"),
     ]:
         project_dir = output_dir / project_id
         if not project_dir.exists():
@@ -736,9 +728,16 @@ def _copy_licenses(output_dir: Path) -> None:
         except importlib.metadata.PackageNotFoundError:
             continue
         for fname in ["LICENSE", "NOTICE"]:
-            src = Path(str(dist.locate_file(f"licenses/{fname}")))
-            if src.exists():
-                shutil.copy2(src, project_dir / fname)
+            matches = [
+                f
+                for f in (dist.files or [])
+                if Path(str(f)).name == fname and "dist-info" in str(f)
+            ]
+            for f in matches:
+                src = Path(str(dist.locate_file(f)))
+                if src.exists():
+                    shutil.copy2(src, project_dir / fname)
+                    break
 
 
 def main():

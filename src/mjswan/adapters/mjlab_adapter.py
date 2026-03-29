@@ -64,7 +64,7 @@ def _adapt_obs_func(func: Any) -> ObsFunc:
 
     If *func* is already an mjswan ``ObsFunc`` it is returned as-is, so
     mjswan sentinels can be passed directly inside mjlab ``ObservationTermCfg``
-    for functions that have no mjlab equivalent (e.g. ``simple_velocity_command``).
+    for functions that have no mjlab equivalent.
 
     Otherwise, looks up ``func.__name__`` directly on
     ``mjswan.envs.mdp.observations``.

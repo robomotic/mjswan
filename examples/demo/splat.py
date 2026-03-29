@@ -88,7 +88,8 @@ def setup_builder() -> mjswan.Builder:
                     "joint_vel": ObservationTermCfg(func=obs_fns.joint_vel_rel),
                     "last_action": ObservationTermCfg(func=obs_fns.last_action),
                     "velocity_cmd": ObservationTermCfg(
-                        func=obs_fns.simple_velocity_command
+                        func=obs_fns.generated_commands,
+                        params={"command_name": "velocity"},
                     ),
                 }
             )
