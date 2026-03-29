@@ -109,6 +109,12 @@ _G1_DAMPING = {
     "right_wrist_pitch_joint": 1.06814150219,
     "right_wrist_yaw_joint": 1.06814150219,
 }
+_G1_OFFSET = {
+    "left_shoulder_pitch_joint": 0.5,
+    "right_shoulder_pitch_joint": -0.5,
+    "left_wrist_roll_joint": 2.3,
+    "right_wrist_roll_joint": 2.3,
+}
 
 
 def setup_builder() -> mjswan.Builder:
@@ -154,6 +160,7 @@ def setup_builder() -> mjswan.Builder:
                 entity_name="robot",
                 actuator_names=(".*",),
                 scale=_G1_SCALE,
+                offset=_G1_OFFSET,
                 stiffness=_G1_STIFFNESS,
                 damping=_G1_DAMPING,
             ),

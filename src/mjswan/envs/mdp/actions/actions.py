@@ -113,6 +113,8 @@ class JointPositionActionCfg(BaseActionCfg):
         entry: dict[str, Any] = {"type": "joint_position"}
         if self.scale != 1.0:
             entry["scale"] = self.scale
+        if self.offset != 0.0:
+            entry["offset"] = self.offset
         entry["use_default_offset"] = self.use_default_offset
         if self.stiffness is not None:
             entry["stiffness"] = self.stiffness
@@ -164,6 +166,8 @@ class JointEffortActionCfg(BaseActionCfg):
         entry: dict[str, Any] = {"type": "torque"}
         if self.scale != 1.0:
             entry["scale"] = self.scale
+        if self.offset != 0.0:
+            entry["offset"] = self.offset
         if self.stiffness is not None:
             entry["stiffness"] = self.stiffness
         if self.damping is not None:

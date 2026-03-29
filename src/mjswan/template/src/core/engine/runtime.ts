@@ -108,6 +108,7 @@ export class mjswanRuntime {
       qposAdr: number[];
       qvelAdr: number[];
       actionScale: Float32Array;
+      actionOffset: Float32Array;
       defaultJointPos: Float32Array;
       // Per-actuator flag: true = position actuator (ctrl=target_pos, PD internal),
       // false = motor actuator (ctrl=torque, PD computed in browser from kp/kd).
@@ -653,6 +654,7 @@ export class mjswanRuntime {
       qposAdr: number[];
       qvelAdr: number[];
       actionScale: Float32Array;
+      actionOffset: Float32Array;
       defaultJointPos: Float32Array;
       positionActuator: boolean[];
       kp: Float32Array;
@@ -664,6 +666,7 @@ export class mjswanRuntime {
     // new block is absent.
     let controlType: string;
     let configScale: number[] | number | Record<string, number> | undefined;
+    let configOffset: number[] | number | Record<string, number> | undefined;
     let configStiffness: number[] | number | Record<string, number> | undefined;
     let configDamping: number[] | number | Record<string, number> | undefined;
     let useDefaultOffset = true;
@@ -674,6 +677,7 @@ export class mjswanRuntime {
       if (firstTerm) {
         controlType = firstTerm.type ?? 'joint_position';
         configScale = firstTerm.scale as number[] | number | Record<string, number> | undefined;
+        configOffset = firstTerm.offset as number[] | number | Record<string, number> | undefined;
         configStiffness = firstTerm.stiffness as number[] | number | Record<string, number> | undefined;
         configDamping = firstTerm.damping as number[] | number | Record<string, number> | undefined;
         if (firstTerm.use_default_offset !== undefined) {
@@ -703,6 +707,7 @@ export class mjswanRuntime {
     const numActions = mapping.qposAdr.length;
     const jointNames = runner.getPolicyJointNames();
     const actionScale = this.normalizeControlArray(configScale, numActions, 1.0, jointNames);
+    const actionOffset = this.normalizeControlArray(configOffset, numActions, 0.0, jointNames);
     const defaultJointPos = useDefaultOffset
       ? runner.getDefaultJointPos()
       : new Float32Array(numActions);
@@ -731,6 +736,7 @@ export class mjswanRuntime {
       controlType,
       ...mapping,
       actionScale,
+      actionOffset,
       defaultJointPos,
       positionActuator,
       kp,
@@ -798,7 +804,7 @@ export class mjswanRuntime {
       return;
     }
 
-    const { controlType, ctrlAdr, qposAdr, qvelAdr, actionScale, defaultJointPos, positionActuator, kp, kd } =
+    const { controlType, ctrlAdr, qposAdr, qvelAdr, actionScale, actionOffset, defaultJointPos, positionActuator, kp, kd } =
       this.policyControl;
     const numActions = ctrlAdr.length;
     const actions = this.policyRunner?.getLastActions() ?? new Float32Array(numActions);
@@ -807,7 +813,7 @@ export class mjswanRuntime {
 
     if (controlType === 'joint_position') {
       for (let i = 0; i < numActions; i++) {
-        const target = defaultJointPos[i] + actionScale[i] * actions[i];
+        const target = defaultJointPos[i] + actionOffset[i] + actionScale[i] * actions[i];
         const ctrlIndex = ctrlAdr[i];
         if (ctrlIndex < 0) continue;
 
