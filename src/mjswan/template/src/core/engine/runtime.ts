@@ -24,6 +24,8 @@ import { SceneCacheManager } from '../cache/sceneCacheManager';
 import { SceneResourceTracker } from '../cache/resourceTracker';
 import { MemoryMonitor } from '../cache/memoryMonitor';
 import { Observations } from '../observation/observations';
+import { TerminationManager } from '../termination/TerminationManager';
+import { Terminations } from '../termination/terminations';
 import * as ort from 'onnxruntime-web';
 import { PolicyRunner } from '../policy/PolicyRunner';
 import { OnnxModule } from '../policy/OnnxModule';
@@ -99,24 +101,26 @@ export class mjswanRuntime {
   private policyStateBuilder: PolicyStateBuilder | null;
   private policyConfigPath: string | null;
   private policyDebugCounter: number;
-  private policyControl:
-    | {
-      controlType: string;
-      ctrlAdr: number[];
-      qposAdr: number[];
-      qvelAdr: number[];
-      actionScale: Float32Array;
-      defaultJointPos: Float32Array;
-      // Per-actuator flag: true = position actuator (ctrl=target_pos, PD internal),
-      // false = motor actuator (ctrl=torque, PD computed in browser from kp/kd).
-      positionActuator: boolean[];
-      kp: Float32Array;
-      kd: Float32Array;
-    }
-    | null;
+  private policyControl: Array<{
+    controlType: string;
+    ctrlAdr: number[];
+    qposAdr: number[];
+    qvelAdr: number[];
+    // Indices into the flat policy action vector for this term's joints.
+    actionIndices: number[];
+    actionScale: Float32Array;
+    actionOffset: Float32Array;
+    defaultJointPos: Float32Array;
+    // Per-actuator flag: true = position actuator (ctrl=target_pos, PD internal),
+    // false = motor actuator (ctrl=torque, PD computed in browser from kp/kd).
+    positionActuator: boolean[];
+    kp: Float32Array;
+    kd: Float32Array;
+  }> | null;
   private onnxModule: OnnxModule | null;
   private onnxInputDict: Record<string, ort.Tensor> | null;
   private onnxInferencing: boolean;
+  private terminationManager: TerminationManager | null;
   private vrButton: HTMLElement | null;
   private splatMesh: SplatMesh | null;
   private colliderMesh: THREE.Group | null;
@@ -216,6 +220,7 @@ export class mjswanRuntime {
     this.onnxModule = null;
     this.onnxInputDict = null;
     this.onnxInferencing = false;
+    this.terminationManager = null;
     this.splatMesh = null;
     this.colliderMesh = null;
     this.cameraState = { trackBodyId: null, prevBodyPos: null };
@@ -487,6 +492,20 @@ export class mjswanRuntime {
         }
         this.executeSimulationSteps();
         this.updateCachedState();
+
+        // Evaluate termination conditions after simulation step
+        if (this.terminationManager && this.policyStateBuilder) {
+          const postState = this.policyStateBuilder.build();
+          const result = this.terminationManager.evaluate(postState);
+          if (result.done) {
+            this.resetSimulationState();
+            this.terminationManager.reset();
+            if (this.policyRunner) {
+              const resetState = this.policyStateBuilder.build();
+              this.policyRunner.reset(resetState);
+            }
+          }
+        }
       }
 
       const elapsed = (performance.now() - loopStart) / 1000;
@@ -509,6 +528,7 @@ export class mjswanRuntime {
     this.onnxModule = null;
     this.onnxInputDict = null;
     this.onnxInferencing = false;
+    this.terminationManager = null;
 
     // Clear existing commands when switching policies
     const commandManager = getCommandManager();
@@ -566,6 +586,12 @@ export class mjswanRuntime {
       this.policyRunner.reset(state);
       this.policyControl = this.buildPolicyControl(config, runner, this.policyStateBuilder);
 
+      // Initialize termination manager if termination config is present
+      if (config.terminations && Object.keys(config.terminations).length > 0) {
+        this.terminationManager = new TerminationManager(config.terminations, Terminations);
+        console.log(`[TerminationManager] ${this.terminationManager.size} termination term(s) loaded`);
+      }
+
       if (config.onnx?.path) {
         const onnxPath = this.resolvePolicyAssetPath(policyConfigPath, config.onnx.path);
         const onnxUrl = this.resolveAssetUrl(onnxPath);
@@ -621,72 +647,176 @@ export class mjswanRuntime {
     config: PolicyConfig,
     runner: PolicyRunner,
     stateBuilder: PolicyStateBuilder
-  ):
-    | {
-      controlType: string;
-      ctrlAdr: number[];
-      qposAdr: number[];
-      qvelAdr: number[];
-      actionScale: Float32Array;
-      defaultJointPos: Float32Array;
-      positionActuator: boolean[];
-      kp: Float32Array;
-      kd: Float32Array;
-    }
-    | null {
-    const controlType = config.control_type ?? 'joint_position';
-    if (controlType !== 'joint_position' && controlType !== 'torque') {
-      console.warn(`[PolicyRunner] Unsupported control_type: ${controlType}`);
-      return null;
-    }
-
-    const mapping = stateBuilder.getControlMapping();
-    if (!mapping) {
-      console.warn('[PolicyRunner] Failed to build control mapping.');
-      return null;
-    }
-
-    const numActions = mapping.qposAdr.length;
-    const actionScale = this.normalizeControlArray(config.action_scale, numActions, 1.0);
-    const defaultJointPos = runner.getDefaultJointPos();
-    const kp = this.normalizeControlArray(config.stiffness, numActions, 0.0);
-    const kd = this.normalizeControlArray(config.damping, numActions, 0.0);
-
-    // Detect per-actuator whether the scene uses position actuators (biastype=affine,
-    // ctrl=target_pos, PD handled internally by MuJoCo) or motor actuators
-    // (biastype=none, ctrl=torque, PD must be computed externally from kp/kd).
+  ): Array<{
+    controlType: string;
+    ctrlAdr: number[];
+    qposAdr: number[];
+    qvelAdr: number[];
+    actionIndices: number[];
+    actionScale: Float32Array;
+    actionOffset: Float32Array;
+    defaultJointPos: Float32Array;
+    positionActuator: boolean[];
+    kp: Float32Array;
+    kd: Float32Array;
+  }> | null {
+    const jointNames = runner.getPolicyJointNames();
     const affineBiasValue = this.mujoco.mjtBias?.mjBIAS_AFFINE?.value ?? 1;
-    const positionActuator: boolean[] = mapping.ctrlAdr.map((adr) => {
-      if (adr < 0 || !this.mjModel) return false;
-      return this.mjModel.actuator_biastype[adr] === affineBiasValue;
-    });
 
-    const isPosition = positionActuator.some(Boolean);
-    const isMotor = positionActuator.some((v) => !v);
-    if (isPosition && isMotor) {
-      console.warn('[PolicyRunner] Mixed actuator types detected; behavior may be incorrect.');
-    }
-    console.log(
-      `[PolicyRunner] Actuator mode: ${isPosition ? 'position (ctrl=target_pos)' : 'motor (ctrl=torque, external PD)'}`
-    );
+    const buildEntry = (
+      termKey: string,
+      controlType: string,
+      mapping: { ctrlAdr: number[]; qposAdr: number[]; qvelAdr: number[]; actionIndices: number[] },
+      configScale: number[] | number | Record<string, number> | undefined,
+      configOffset: number[] | number | Record<string, number> | undefined,
+      configStiffness: number[] | number | Record<string, number> | undefined,
+      configDamping: number[] | number | Record<string, number> | undefined,
+      useDefaultOffset: boolean
+    ) => {
+      const n = mapping.qposAdr.length;
+      const subsetJointNames = mapping.actionIndices.map((i) => jointNames[i]);
 
-    return {
-      controlType,
-      ...mapping,
-      actionScale,
-      defaultJointPos,
-      positionActuator,
-      kp,
-      kd,
+      const actionScale = this.normalizeControlArray(configScale, n, 1.0, subsetJointNames);
+      const actionOffset = this.normalizeControlArray(configOffset, n, 0.0, subsetJointNames);
+
+      const allDefaultJointPos = useDefaultOffset
+        ? runner.getDefaultJointPos()
+        : new Float32Array(jointNames.length);
+      const defaultJointPos = new Float32Array(n);
+      for (let i = 0; i < n; i++) {
+        defaultJointPos[i] = allDefaultJointPos[mapping.actionIndices[i]];
+      }
+
+      const kp = this.normalizeControlArray(configStiffness, n, 0.0, subsetJointNames);
+      const kd = this.normalizeControlArray(configDamping, n, 0.0, subsetJointNames);
+
+      // Detect per-actuator whether the scene uses position actuators (biastype=affine,
+      // ctrl=target_pos, PD handled internally by MuJoCo) or motor actuators
+      // (biastype=none, ctrl=torque, PD must be computed externally from kp/kd).
+      const positionActuator: boolean[] = mapping.ctrlAdr.map((adr) => {
+        if (adr < 0 || !this.mjModel) return false;
+        return this.mjModel.actuator_biastype[adr] === affineBiasValue;
+      });
+
+      const isPosition = positionActuator.some(Boolean);
+      const isMotor = positionActuator.some((v) => !v);
+      if (isPosition && isMotor) {
+        console.warn(`[PolicyRunner] Action term "${termKey}": mixed actuator types detected.`);
+      }
+      console.log(
+        `[PolicyRunner] Action term "${termKey}" (${controlType}): ${n} joint(s), ` +
+        `mode: ${isPosition ? 'position (ctrl=target_pos)' : 'motor (ctrl=torque, external PD)'}`
+      );
+
+      return {
+        controlType,
+        ctrlAdr: mapping.ctrlAdr,
+        qposAdr: mapping.qposAdr,
+        qvelAdr: mapping.qvelAdr,
+        actionIndices: mapping.actionIndices,
+        actionScale,
+        actionOffset,
+        defaultJointPos,
+        positionActuator,
+        kp,
+        kd,
+      };
     };
+
+    // ── Legacy path: no `actions` block, use flat top-level fields ──────────
+    const actionsConfig = config.actions;
+    if (!actionsConfig || Object.keys(actionsConfig).length === 0) {
+      const controlType = config.control_type ?? 'joint_position';
+      if (controlType !== 'joint_position' && controlType !== 'torque') {
+        console.warn(`[PolicyRunner] Unsupported control_type: ${controlType}`);
+        return null;
+      }
+      const baseMapping = stateBuilder.getControlMapping();
+      if (!baseMapping) {
+        console.warn('[PolicyRunner] Failed to build control mapping.');
+        return null;
+      }
+      const mapping = {
+        ...baseMapping,
+        actionIndices: Array.from({ length: baseMapping.qposAdr.length }, (_, i) => i),
+      };
+      return [buildEntry(
+        'legacy',
+        controlType,
+        mapping,
+        config.action_scale,
+        undefined,
+        config.stiffness,
+        config.damping,
+        true
+      )];
+    }
+
+    // ── Multi-term path: iterate every entry in the `actions` block ─────────
+    const results: Array<ReturnType<typeof buildEntry>> = [];
+
+    for (const [termKey, actionTerm] of Object.entries(actionsConfig)) {
+      const controlType = actionTerm.type ?? 'joint_position';
+      if (controlType !== 'joint_position' && controlType !== 'torque') {
+        console.warn(`[PolicyRunner] Action term "${termKey}": unsupported type "${controlType}", skipping.`);
+        continue;
+      }
+
+      // If actuator_names is absent or [".*"], match all joints (backward-compatible).
+      const patterns = actionTerm.actuator_names ?? ['.*'];
+      const isMatchAll = patterns.length === 1 && patterns[0] === '.*';
+
+      let mapping: { ctrlAdr: number[]; qposAdr: number[]; qvelAdr: number[]; actionIndices: number[] } | null;
+
+      if (isMatchAll) {
+        const baseMapping = stateBuilder.getControlMapping();
+        if (!baseMapping) {
+          console.warn(`[PolicyRunner] Action term "${termKey}": failed to build control mapping, skipping.`);
+          continue;
+        }
+        mapping = {
+          ...baseMapping,
+          actionIndices: Array.from({ length: baseMapping.qposAdr.length }, (_, i) => i),
+        };
+      } else {
+        mapping = stateBuilder.getControlMappingFor(patterns, jointNames);
+        if (!mapping) {
+          console.warn(`[PolicyRunner] Action term "${termKey}": no joints matched patterns [${patterns.join(', ')}], skipping.`);
+          continue;
+        }
+      }
+
+      const useDefaultOffset = actionTerm.use_default_offset !== undefined
+        ? actionTerm.use_default_offset
+        : controlType === 'joint_position';
+
+      results.push(buildEntry(
+        termKey,
+        controlType,
+        mapping,
+        actionTerm.scale as number[] | number | Record<string, number> | undefined,
+        actionTerm.offset as number[] | number | Record<string, number> | undefined,
+        actionTerm.stiffness as number[] | number | Record<string, number> | undefined,
+        actionTerm.damping as number[] | number | Record<string, number> | undefined,
+        useDefaultOffset
+      ));
+    }
+
+    if (results.length === 0) {
+      console.warn('[PolicyRunner] No valid action terms found in config.actions.');
+      return null;
+    }
+    return results;
   }
 
   private normalizeControlArray(
-    values: number[] | number | undefined,
+    values: number[] | number | Record<string, number> | undefined,
     length: number,
-    fallback: number
+    fallback: number,
+    jointNames?: string[]
   ): Float32Array {
     const output = new Float32Array(length);
+    output.fill(fallback);
     if (typeof values === 'number') {
       output.fill(values);
       return output;
@@ -697,7 +827,17 @@ export class mjswanRuntime {
       }
       return output;
     }
-    output.fill(fallback);
+    if (values !== null && typeof values === 'object' && jointNames) {
+      for (const [name, val] of Object.entries(values)) {
+        const idx = jointNames.indexOf(name);
+        if (idx >= 0 && idx < length) {
+          output[idx] = val;
+        } else {
+          console.warn(`[PolicyRunner] Joint name "${name}" not found in policy_joint_names; skipping.`);
+        }
+      }
+      return output;
+    }
     return output;
   }
 
@@ -729,36 +869,42 @@ export class mjswanRuntime {
       return;
     }
 
-    const { controlType, ctrlAdr, qposAdr, qvelAdr, actionScale, defaultJointPos, positionActuator, kp, kd } =
-      this.policyControl;
-    const numActions = ctrlAdr.length;
-    const actions = this.policyRunner?.getLastActions() ?? new Float32Array(numActions);
     const ctrl = this.mjData.ctrl;
     ctrl.fill(0.0);
 
-    if (controlType === 'joint_position') {
-      for (let i = 0; i < numActions; i++) {
-        const target = defaultJointPos[i] + actionScale[i] * actions[i];
-        const ctrlIndex = ctrlAdr[i];
-        if (ctrlIndex < 0) continue;
+    // Fetch the full action vector once; each term reads its own slice via actionIndices.
+    const allActions = this.policyRunner?.getLastActions() ?? new Float32Array(0);
 
-        if (positionActuator[i]) {
-          // Position actuator (biastype=affine): ctrl = target joint position.
-          // MuJoCo computes force = kp*(ctrl - qpos) - kd*qvel internally.
-          ctrl[ctrlIndex] = target;
-        } else {
-          // Motor actuator (biastype=none): ctrl = torque.
-          // PD must be computed externally using kp/kd from the policy config.
-          const qpos = this.mjData.qpos[qposAdr[i]];
-          const qvel = this.mjData.qvel[qvelAdr[i]];
-          ctrl[ctrlIndex] = kp[i] * (target - qpos) + kd[i] * (0 - qvel);
+    for (const term of this.policyControl) {
+      const { controlType, ctrlAdr, qposAdr, qvelAdr, actionIndices, actionScale, actionOffset, defaultJointPos, positionActuator, kp, kd } =
+        term;
+      const numJoints = ctrlAdr.length;
+
+      if (controlType === 'joint_position') {
+        for (let i = 0; i < numJoints; i++) {
+          const ctrlIndex = ctrlAdr[i];
+          if (ctrlIndex < 0) continue;
+          const actionValue = allActions[actionIndices[i]] ?? 0;
+          const target = defaultJointPos[i] + actionOffset[i] + actionScale[i] * actionValue;
+
+          if (positionActuator[i]) {
+            // Position actuator (biastype=affine): ctrl = target joint position.
+            // MuJoCo computes force = kp*(ctrl - qpos) - kd*qvel internally.
+            ctrl[ctrlIndex] = target;
+          } else {
+            // Motor actuator (biastype=none): ctrl = torque.
+            // PD must be computed externally using kp/kd from the policy config.
+            const qpos = this.mjData.qpos[qposAdr[i]];
+            const qvel = this.mjData.qvel[qvelAdr[i]];
+            ctrl[ctrlIndex] = kp[i] * (target - qpos) + kd[i] * (0 - qvel);
+          }
         }
-      }
-    } else if (controlType === 'torque') {
-      for (let i = 0; i < numActions; i++) {
-        const ctrlIndex = ctrlAdr[i];
-        if (ctrlIndex >= 0) {
-          ctrl[ctrlIndex] = actionScale[i] * actions[i];
+      } else if (controlType === 'torque') {
+        for (let i = 0; i < numJoints; i++) {
+          const ctrlIndex = ctrlAdr[i];
+          if (ctrlIndex >= 0) {
+            ctrl[ctrlIndex] = actionScale[i] * (allActions[actionIndices[i]] ?? 0);
+          }
         }
       }
     }
@@ -801,9 +947,10 @@ export class mjswanRuntime {
 
       const raw = actionTensor.data as Float32Array | number[];
       const action = ArrayBuffer.isView(raw) ? new Float32Array(raw) : Float32Array.from(raw);
-      if (this.policyControl && action.length !== this.policyControl.ctrlAdr.length) {
+      const expectedActionCount = this.policyRunner?.getNumActions() ?? 0;
+      if (this.policyControl && action.length !== expectedActionCount) {
         console.warn('[PolicyRunner] Action size mismatch:', {
-          expected: this.policyControl.ctrlAdr.length,
+          expected: expectedActionCount,
           got: action.length,
         });
         return;

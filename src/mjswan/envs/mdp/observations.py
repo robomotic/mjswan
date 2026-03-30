@@ -130,9 +130,6 @@ mjlab: ``env.action_manager.action``
 # Command observations
 # ---------------------------------------------------------------------------
 
-simple_velocity_command = ObsFunc("SimpleVelocityCommand")
-"""(lin_vel_x, lin_vel_y, ang_vel_z) velocity command as an observation term."""
-
 velocity_command_with_oscillators = ObsFunc("VelocityCommandWithOscillators")
 """Velocity command augmented with oscillator signals (16 dims)."""
 
@@ -187,7 +184,6 @@ __all__ = [
     "projected_gravity_isaac",
     "joint_positions_isaac",
     "previous_actions",
-    "simple_velocity_command",
     "velocity_command_with_oscillators",
     "impedance_command",
     "builtin_sensor",

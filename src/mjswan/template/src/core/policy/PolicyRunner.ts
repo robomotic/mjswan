@@ -200,7 +200,7 @@ export class PolicyRunner {
 
   private buildObservationGroups(): void {
     const registry = this.options.observations ?? {};
-    const obsConfig = this.config.obs_config ?? {};
+    const obsConfig = this.config.observations ?? {};
     this.obsGroups = {};
     this.obsLayouts = {};
     this.obsSizes = {};

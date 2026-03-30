@@ -74,6 +74,54 @@ export class PolicyStateBuilder {
     };
   }
 
+  /**
+   * Returns the subset of control addresses for joints matching any of the
+   * given regex patterns, along with the action vector indices (positions in
+   * the flat policy output) for those joints.
+   *
+   * Patterns follow MuJoCo/mjlab convention: `".*"` matches all joints.
+   * Each pattern is anchored with `^(?:...)$` so partial matches are rejected.
+   *
+   * Returns `null` if no joints match or control addresses are unavailable.
+   */
+  getControlMappingFor(
+    patterns: string[],
+    allJointNames: string[]
+  ): {
+    ctrlAdr: number[];
+    qposAdr: number[];
+    qvelAdr: number[];
+    actionIndices: number[];
+  } | null {
+    if (!this.ctrlAdr) {
+      return null;
+    }
+
+    const regexps = patterns.map((p) => new RegExp(`^(?:${p})$`));
+    const matchesAny = (name: string): boolean =>
+      regexps.some((re) => re.test(name));
+
+    const ctrlAdr: number[] = [];
+    const qposAdr: number[] = [];
+    const qvelAdr: number[] = [];
+    const actionIndices: number[] = [];
+
+    for (let i = 0; i < allJointNames.length; i++) {
+      if (matchesAny(allJointNames[i])) {
+        ctrlAdr.push(this.ctrlAdr[i]);
+        qposAdr.push(this.qposAdr[i]);
+        qvelAdr.push(this.qvelAdr[i]);
+        actionIndices.push(i);
+      }
+    }
+
+    if (ctrlAdr.length === 0) {
+      return null;
+    }
+
+    return { ctrlAdr, qposAdr, qvelAdr, actionIndices };
+  }
+
   private buildCtrlAdr(): number[] | null {
     if (this.mjModel.nu <= 0) {
       return null;

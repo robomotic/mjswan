@@ -6,18 +6,22 @@ managing MuJoCo scenes and their associated policies.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import mujoco
 import onnx
 
+from .adapters import adapt_actions, adapt_observations, adapt_terminations
 from .policy import PolicyConfig, PolicyHandle
 from .splat import SplatConfig, SplatHandle
 from .viewer_config import ViewerConfig
 
 if TYPE_CHECKING:
+    from .envs.mdp.actions.actions import ActionTermCfg
     from .managers.observation_manager import ObservationGroupCfg
+    from .managers.termination_manager import TerminationTermCfg
     from .project import ProjectHandle
 
 
@@ -73,13 +77,15 @@ class SceneHandle:
 
     def add_policy(
         self,
-        policy: onnx.ModelProto,
         name: str,
+        policy: onnx.ModelProto,
         *,
         metadata: dict[str, Any] | None = None,
         source_path: str | None = None,
         config_path: str | None = None,
-        observations: dict[str, ObservationGroupCfg] | None = None,
+        observations: dict[str, ObservationGroupCfg] | dict[str, Any] | None = None,
+        actions: Mapping[str, ActionTermCfg] | Mapping[str, Any] | None = None,
+        terminations: dict[str, TerminationTermCfg] | dict[str, Any] | None = None,
     ) -> PolicyHandle:
         """Add an ONNX policy to this scene.
 
@@ -89,9 +95,13 @@ class SceneHandle:
             metadata: Optional metadata dictionary for the policy.
             source_path: Optional source path for the policy ONNX file.
             config_path: Optional source path for the policy config JSON file.
-            observations: Observation group configurations (mjlab-compatible).
-                Keys are group names (e.g. ``"policy"``); values are
-                :class:`ObservationGroupCfg` instances.
+            observations: Observation group configurations.  Accepts both
+                mjswan and mjlab ``ObservationGroupCfg`` instances — mjlab
+                types are converted automatically (mjlab is a soft dependency).
+            actions: Action term configurations.  Accepts both mjswan and
+                mjlab ``ActionTermCfg`` subclass instances.
+            terminations: Termination term configurations.  Accepts both
+                mjswan and mjlab ``TerminationTermCfg`` instances.
 
         Returns:
             PolicyHandle for configuring the policy (adding commands, etc.)
@@ -125,13 +135,20 @@ class SceneHandle:
         if metadata is None:
             metadata = {}
 
+        # Adapt mjlab types to mjswan internals (no-op if already mjswan)
+        adapted_observations = adapt_observations(observations)
+        adapted_actions = adapt_actions(actions)
+        adapted_terminations = adapt_terminations(terminations)
+
         policy_config = PolicyConfig(
             name=name,
             model=policy,
             metadata=metadata,
             source_path=source_path,
             config_path=config_path,
-            observations=observations,
+            observations=adapted_observations,
+            actions=adapted_actions,
+            terminations=adapted_terminations,
         )
         self._config.policies.append(policy_config)
         return PolicyHandle(policy_config, self)

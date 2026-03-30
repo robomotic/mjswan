@@ -62,11 +62,35 @@ npm install mjswan
 ```
 
 You can run the demo using the `uv` command with the python package `mjswan[examples]`:
-```sh
+``` sh
 uv run main
 ```
 
-For detailed installation instructions, visit the [documentation](https://mjswan.readthedocs.io).
+The minimum python script for a sanity check:
+``` python
+import mujoco
+import mjswan
+
+mjspec = mujoco.MjSpec.from_string("""
+<mujoco>
+  <worldbody>
+    <light diffuse=".5 .5 .5" pos="0 0 3" dir="0 0 -1"/>
+    <geom type="plane" size="1 1 0.1" rgba=".9 0 0 1"/>
+    <body pos="0 0 1">
+      <joint type="free"/>
+      <geom type="box" size=".1 .2 .3" rgba="0 .9 0 1"/>
+    </body>
+  </worldbody>
+</mujoco>
+""")
+
+builder = mjswan.Builder()
+builder.add_project(name="Sanity Check").add_scene(name="Box over plane", spec=mjspec)
+app = builder.build()
+app.launch()
+```
+
+For detailed instructions, visit the [documentation](https://mjswan.readthedocs.io).
 
 
 ## Third-Party Assets

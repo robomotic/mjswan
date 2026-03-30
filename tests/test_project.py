@@ -73,8 +73,8 @@ class TestSceneHandle:
     def test_add_policy_appends_to_scene_policies(self, minimal_model, minimal_onnx):
         builder = Builder()
         scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
-        scene.add_policy(minimal_onnx, name="Policy A")
-        scene.add_policy(minimal_onnx, name="Policy B")
+        scene.add_policy(name="Policy A", policy=minimal_onnx)
+        scene.add_policy(name="Policy B", policy=minimal_onnx)
         policies = builder.get_projects()[0].scenes[0].policies
         assert len(policies) == 2
         assert policies[0].name == "Policy A"
@@ -82,7 +82,7 @@ class TestSceneHandle:
 
     def test_add_policy_returns_policy_handle(self, minimal_model, minimal_onnx):
         scene = Builder().add_project(name="P").add_scene(name="S", model=minimal_model)
-        handle = scene.add_policy(minimal_onnx, name="Policy")
+        handle = scene.add_policy(name="Policy", policy=minimal_onnx)
         assert isinstance(handle, mjswan.PolicyHandle)
 
     def test_set_metadata_returns_self_for_chaining(self, minimal_model):
@@ -105,7 +105,7 @@ class TestPolicyHandle:
     def _make_policy(self, minimal_model, minimal_onnx):
         builder = Builder()
         scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
-        policy = scene.add_policy(minimal_onnx, name="Policy")
+        policy = scene.add_policy(name="Policy", policy=minimal_onnx)
         return builder, policy
 
     def test_add_velocity_command_stored_under_velocity_key(

@@ -214,6 +214,8 @@ class Builder:
                                             if getattr(policy, "config_path", None)
                                             or getattr(policy, "commands", None)
                                             or getattr(policy, "observations", None)
+                                            or getattr(policy, "actions", None)
+                                            or getattr(policy, "terminations", None)
                                             else {}
                                         ),
                                         **(
@@ -444,9 +446,9 @@ class Builder:
                                             name: cmd.to_dict()
                                             for name, cmd in policy.commands.items()
                                         }
-                                    # Merge observation groups into obs_config
+                                    # Merge observation groups into observations
                                     if policy.observations:
-                                        obs_config = data.get("obs_config", {})
+                                        obs_config = data.get("observations", {})
                                         for key, group in policy.observations.items():
                                             # Avoid overwriting existing groups
                                             # (e.g. ONNX "policy" group from config_path)
@@ -454,7 +456,19 @@ class Builder:
                                             if target_key in obs_config:
                                                 target_key = f"{key}_monitor"
                                             obs_config[target_key] = group.to_list()
-                                        data["obs_config"] = obs_config
+                                        data["observations"] = obs_config
+                                    # Serialize action terms
+                                    if policy.actions:
+                                        data["actions"] = {
+                                            name: cfg.to_dict()
+                                            for name, cfg in policy.actions.items()
+                                        }
+                                    # Serialize termination terms
+                                    if policy.terminations:
+                                        data["terminations"] = {
+                                            name: cfg.to_dict()
+                                            for name, cfg in policy.terminations.items()
+                                        }
                                     with open(target, "w") as f:
                                         json.dump(data, f, indent=2)
                                 except Exception:
@@ -465,8 +479,13 @@ class Builder:
                                     category=RuntimeWarning,
                                     stacklevel=2,
                                 )
-                        elif policy.commands or policy.observations:
-                            # No config_path but commands/observations defined
+                        elif (
+                            policy.commands
+                            or policy.observations
+                            or policy.actions
+                            or policy.terminations
+                        ):
+                            # No config_path but MDP components defined
                             target = policy_path.with_suffix(".json")
                             data: dict = {
                                 "onnx": {"path": policy_path.name},
@@ -477,9 +496,19 @@ class Builder:
                                     for name, cmd in policy.commands.items()
                                 }
                             if policy.observations:
-                                data["obs_config"] = {
+                                data["observations"] = {
                                     key: group.to_list()
                                     for key, group in policy.observations.items()
+                                }
+                            if policy.actions:
+                                data["actions"] = {
+                                    name: cfg.to_dict()
+                                    for name, cfg in policy.actions.items()
+                                }
+                            if policy.terminations:
+                                data["terminations"] = {
+                                    name: cfg.to_dict()
+                                    for name, cfg in policy.terminations.items()
                                 }
                             with open(target, "w") as f:
                                 json.dump(data, f, indent=2)

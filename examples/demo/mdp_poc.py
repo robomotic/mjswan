@@ -1,20 +1,22 @@
-"""POC: mjlab-compatible MDP observation config via mjswan.
+"""POC: mjlab-compatible MDP config via mjswan.
 
 Demonstrates the Python -> JS mapping proposed in issue #32.
 
-The observation configuration uses the exact same API as mjlab::
+The MDP configuration uses the exact same API as mjlab::
 
     # mjlab (training)
     from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
     from mjlab.envs.mdp import observations as obs_fns
+    from mjlab.envs.mdp.actions import JointPositionActionCfg
 
     # mjswan (browser deployment) — identical API
     from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
     from mjswan.envs.mdp import observations as obs_fns
+    from mjswan.envs.mdp.actions import JointPositionActionCfg
 
-At build time, observation groups are serialized into obs_config in the
-policy JSON. The browser-side PolicyRunner resolves each entry against
-the existing TypeScript observation registry.
+At build time, observations, actions, and terminations are serialized
+into the policy JSON.  The browser-side runtime resolves each entry
+against the TypeScript registries.
 
 Usage:
     uv run python examples/demo/mdp_poc.py
@@ -25,6 +27,7 @@ import onnx
 
 import mjswan
 from mjswan.envs.mdp import observations as obs_fns
+from mjswan.envs.mdp.actions import JointPositionActionCfg
 from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 
 go2_xml = "examples/demo/assets/unitree_go2/scene.xml"
@@ -42,6 +45,13 @@ scene.add_policy(
     name="vanilla",
     policy=model,
     config_path=go2_cfg,
+    actions={
+        "joint_pos": JointPositionActionCfg(
+            scale=0.5,
+            stiffness=25.0,
+            damping=0.5,
+        ),
+    },
     observations={
         "policy": ObservationGroupCfg(
             terms={

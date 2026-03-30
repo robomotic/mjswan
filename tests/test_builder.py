@@ -2,7 +2,7 @@
 
 Layer breakdown:
   L1 (pure logic / lightweight I/O): TestProjectIdAssignment, TestBuilderValidation,
-                                     TestSaveConfigJson
+                                     TestSaveConfigJson, TestSaveWebPolicyJson
   L3 slow (triggers frontend build): TestFullBuild
 
 Run only L1 tests (pre-commit):  pytest -m "not slow"
@@ -13,11 +13,15 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
 import mjswan
 from mjswan.builder import Builder
+from mjswan.envs.mdp import terminations as term_fns
+from mjswan.envs.mdp.actions import JointEffortActionCfg, JointPositionActionCfg
+from mjswan.managers.termination_manager import TerminationTermCfg
 from mjswan.utils import name2id
 
 
@@ -153,7 +157,7 @@ class TestSaveConfigJson:
     ):
         builder = Builder()
         scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
-        scene.add_policy(minimal_onnx, name="Policy")
+        scene.add_policy(name="Policy", policy=minimal_onnx)
         builder._save_config_json(tmp_path)
         policy = self._read_config(tmp_path)["projects"][0]["scenes"][0]["policies"][0]
         assert policy["name"] == "Policy"
@@ -179,6 +183,376 @@ class TestSaveConfigJson:
         projects = self._read_config(tmp_path)["projects"]
         assert projects[0]["id"] is None
         assert projects[1]["id"] == name2id("MuJoCo Menagerie")
+
+
+# ===========================================================================
+# L1 — _save_web: actions/terminations serialization into policy JSON
+# ===========================================================================
+class TestSaveWebPolicyJson:
+    """Tests for _save_web: verify actions/terminations are emitted into the
+    generated policy JSON, covering both the no-config_path and config_path
+    branches.  The frontend build and template copy are mocked out so these
+    tests remain fast (L1).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _no_frontend(self, monkeypatch):
+        """Skip the Node.js frontend build and the large template copytree."""
+        monkeypatch.setattr("mjswan.builder.ClientBuilder", MagicMock())
+        monkeypatch.setattr("mjswan.builder.shutil.copytree", MagicMock())
+
+    def _run(self, builder: Builder, tmp_path: Path) -> Path:
+        """Call _save_web and return the output directory."""
+        out = tmp_path / "out"
+        builder._save_web(out)
+        return out
+
+    def _policy_json(
+        self,
+        out: Path,
+        policy_name: str,
+        scene_name: str = "S",
+        project_dir: str = "main",
+    ) -> dict:
+        scene_id = name2id(scene_name)
+        policy_id = name2id(policy_name)
+        path = out / project_dir / "assets" / scene_id / f"{policy_id}.json"
+        return json.loads(path.read_text())
+
+    # -----------------------------------------------------------------------
+    # no-config_path branch
+    # -----------------------------------------------------------------------
+
+    def test_no_config_path_actions_emitted(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            actions={
+                "joint_pos": JointPositionActionCfg(
+                    actuator_names=(".*",), scale=0.5, use_default_offset=True
+                ),
+            },
+        )
+        data = self._policy_json(self._run(builder, tmp_path), "Policy")
+        assert "actions" in data
+        assert "joint_pos" in data["actions"]
+        assert data["actions"]["joint_pos"]["type"] == "joint_position"
+        assert data["actions"]["joint_pos"]["scale"] == 0.5
+
+    def test_no_config_path_terminations_emitted(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            terminations={
+                "time_out": TerminationTermCfg(func=term_fns.time_out, time_out=True),
+            },
+        )
+        data = self._policy_json(self._run(builder, tmp_path), "Policy")
+        assert "terminations" in data
+        assert "time_out" in data["terminations"]
+        assert data["terminations"]["time_out"]["name"] == "TimeOut"
+        assert data["terminations"]["time_out"]["time_out"] is True
+
+    def test_no_config_path_both_blocks_emitted(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            actions={
+                "effort": JointEffortActionCfg(actuator_names=(".*",), scale=2.0),
+            },
+            terminations={
+                "fallen": TerminationTermCfg(
+                    func=term_fns.bad_orientation,
+                    params={"limit_angle": 1.2},
+                ),
+            },
+        )
+        data = self._policy_json(self._run(builder, tmp_path), "Policy")
+        assert "actions" in data
+        assert "terminations" in data
+        assert data["actions"]["effort"]["type"] == "torque"
+        assert data["terminations"]["fallen"]["name"] == "BadOrientation"
+        assert data["terminations"]["fallen"]["params"]["limit_angle"] == 1.2
+
+    def test_no_config_path_actions_absent_when_not_set(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            terminations={
+                "time_out": TerminationTermCfg(func=term_fns.time_out, time_out=True),
+            },
+        )
+        data = self._policy_json(self._run(builder, tmp_path), "Policy")
+        assert "actions" not in data
+
+    def test_no_config_path_terminations_absent_when_not_set(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            actions={
+                "joint_pos": JointPositionActionCfg(actuator_names=(".*",)),
+            },
+        )
+        data = self._policy_json(self._run(builder, tmp_path), "Policy")
+        assert "terminations" not in data
+
+    def test_no_config_path_no_json_without_mdp_components(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(name="Policy", policy=minimal_onnx)
+        out = self._run(builder, tmp_path)
+        policy_id = name2id("Policy")
+        scene_id = name2id("S")
+        json_path = out / "main" / "assets" / scene_id / f"{policy_id}.json"
+        assert not json_path.exists()
+
+    def test_no_config_path_onnx_path_in_json(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            actions={"effort": JointEffortActionCfg(actuator_names=(".*",))},
+        )
+        data = self._policy_json(self._run(builder, tmp_path), "Policy")
+        assert data["onnx"]["path"] == "policy.onnx"
+
+    # -----------------------------------------------------------------------
+    # config_path branch
+    # -----------------------------------------------------------------------
+
+    def test_config_path_actions_merged_into_existing_config(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        config_file = tmp_path / "policy_cfg.json"
+        config_file.write_text(
+            json.dumps({"onnx": {"path": "old.onnx"}, "existing_key": "kept"})
+        )
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            config_path=str(config_file),
+            actions={
+                "joint_pos": JointPositionActionCfg(
+                    actuator_names=(".*",), use_default_offset=True
+                ),
+            },
+        )
+        data = self._policy_json(self._run(builder, tmp_path), "Policy")
+        assert "actions" in data
+        assert data["actions"]["joint_pos"]["type"] == "joint_position"
+        assert data["existing_key"] == "kept"
+
+    def test_config_path_terminations_merged_into_existing_config(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        config_file = tmp_path / "policy_cfg.json"
+        config_file.write_text(
+            json.dumps({"onnx": {"path": "old.onnx"}, "existing_key": "kept"})
+        )
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            config_path=str(config_file),
+            terminations={
+                "fallen": TerminationTermCfg(
+                    func=term_fns.bad_orientation,
+                    params={"limit_angle": 0.8},
+                ),
+            },
+        )
+        data = self._policy_json(self._run(builder, tmp_path), "Policy")
+        assert "terminations" in data
+        assert data["terminations"]["fallen"]["name"] == "BadOrientation"
+        assert data["terminations"]["fallen"]["params"]["limit_angle"] == 0.8
+        assert data["existing_key"] == "kept"
+
+    def test_config_path_both_blocks_merged(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        config_file = tmp_path / "policy_cfg.json"
+        config_file.write_text(json.dumps({"onnx": {"path": "old.onnx"}}))
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            config_path=str(config_file),
+            actions={
+                "effort": JointEffortActionCfg(actuator_names=(".*",), scale=1.5),
+            },
+            terminations={
+                "height": TerminationTermCfg(
+                    func=term_fns.root_height_below_minimum,
+                    params={"minimum_height": 0.3},
+                ),
+            },
+        )
+        data = self._policy_json(self._run(builder, tmp_path), "Policy")
+        assert data["actions"]["effort"]["type"] == "torque"
+        assert data["actions"]["effort"]["scale"] == 1.5
+        assert data["terminations"]["height"]["name"] == "RootHeightBelowMinimum"
+        assert data["terminations"]["height"]["params"]["minimum_height"] == 0.3
+
+    def test_config_path_overwrites_existing_actions_block(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        """actions from policy.actions fully replaces any pre-existing actions block."""
+        config_file = tmp_path / "policy_cfg.json"
+        config_file.write_text(
+            json.dumps(
+                {
+                    "onnx": {"path": "old.onnx"},
+                    "actions": {"old_action": {"type": "joint_position"}},
+                }
+            )
+        )
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            config_path=str(config_file),
+            actions={
+                "new_action": JointPositionActionCfg(actuator_names=(".*",)),
+            },
+        )
+        data = self._policy_json(self._run(builder, tmp_path), "Policy")
+        assert "new_action" in data["actions"]
+        assert "old_action" not in data["actions"]
+
+    def test_config_path_onnx_path_updated(self, tmp_path, minimal_model, minimal_onnx):
+        config_file = tmp_path / "policy_cfg.json"
+        config_file.write_text(json.dumps({"onnx": {"path": "stale.onnx"}}))
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            config_path=str(config_file),
+            actions={"joint_pos": JointPositionActionCfg(actuator_names=(".*",))},
+        )
+        data = self._policy_json(self._run(builder, tmp_path), "Policy")
+        assert data["onnx"]["path"] == "policy.onnx"
+
+    def test_config_path_actions_absent_from_json_when_not_set(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        config_file = tmp_path / "policy_cfg.json"
+        config_file.write_text(json.dumps({"onnx": {"path": "old.onnx"}}))
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            config_path=str(config_file),
+        )
+        data = self._policy_json(self._run(builder, tmp_path), "Policy")
+        assert "actions" not in data
+        assert "terminations" not in data
+
+    # -----------------------------------------------------------------------
+    # Serialization correctness
+    # -----------------------------------------------------------------------
+
+    def test_joint_effort_action_scale_serialized(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            actions={"effort": JointEffortActionCfg(actuator_names=(".*",), scale=3.0)},
+        )
+        data = self._policy_json(self._run(builder, tmp_path), "Policy")
+        assert data["actions"]["effort"] == {
+            "type": "torque",
+            "scale": 3.0,
+            "actuator_names": [".*"],
+        }
+
+    def test_joint_position_default_offset_serialized(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            actions={
+                "joint_pos": JointPositionActionCfg(
+                    actuator_names=(".*",), use_default_offset=False
+                ),
+            },
+        )
+        data = self._policy_json(self._run(builder, tmp_path), "Policy")
+        assert data["actions"]["joint_pos"]["use_default_offset"] is False
+
+    def test_timeout_termination_time_out_flag(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            terminations={
+                "time_out": TerminationTermCfg(func=term_fns.time_out, time_out=True),
+            },
+        )
+        data = self._policy_json(self._run(builder, tmp_path), "Policy")
+        term = data["terminations"]["time_out"]
+        assert term["name"] == "TimeOut"
+        assert term.get("time_out") is True
+        assert "params" not in term
+
+    def test_bad_orientation_params_serialized(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            terminations={
+                "fallen": TerminationTermCfg(
+                    func=term_fns.bad_orientation,
+                    params={"limit_angle": 1.57},
+                ),
+            },
+        )
+        data = self._policy_json(self._run(builder, tmp_path), "Policy")
+        assert data["terminations"]["fallen"]["params"]["limit_angle"] == 1.57
+        assert "time_out" not in data["terminations"]["fallen"]
 
 
 # ===========================================================================

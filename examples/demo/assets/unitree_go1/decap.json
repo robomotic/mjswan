@@ -1,5 +1,4 @@
 {
-  "_comment": "Go1 Decap policy using composable atomic observations (total: 42 dims)",
   "policy_joint_names": [
     "FL_hip_joint",
     "FL_thigh_joint",
@@ -15,37 +14,17 @@
     "RR_calf_joint"
   ],
   "default_joint_pos": [
-    0.10000000149011612,
-    0.8,
-    -1.5,
-    -0.10000000149011612,
-    0.8,
-    -1.5,
-    0.10000000149011612,
-    1.0,
-    -1.5,
-    -0.10000000149011612,
-    1.0,
-    -1.5
+    0.10000000149011612, 0.8, -1.5,
+    -0.10000000149011612, 0.8, -1.5,
+    0.10000000149011612, 1.0, -1.5,
+    -0.10000000149011612, 1.0, -1.5
   ],
   "onnx": {
     "meta": {
-      "in_keys": [
-        "obs_history"
-      ],
-      "out_keys": [
-        "action"
-      ],
-      "in_shapes": [
-        [
-          [1, 42]
-        ]
-      ]
+      "in_keys": ["obs_history"],
+      "out_keys": ["action"],
+      "in_shapes": [[[1, 42]]]
     },
     "path": "policy/go1/decap.onnx"
-  },
-  "action_scale": 8.0,
-  "stiffness": 20.0,
-  "damping": 0.5,
-  "control_type": "torque"
+  }
 }
