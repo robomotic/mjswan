@@ -258,6 +258,7 @@ class SceneHandle:
             from .wandb_utils import fetch_pt_onnx_from_wandb_run
 
         handles = []
+        seen_names: set[str] = set()
         for path in run_paths:
             if only_latest:
                 entries = fetch_onnx_from_wandb_run(path)
@@ -266,6 +267,9 @@ class SceneHandle:
 
             for entry in entries:
                 name, model, *rest = entry
+                if name in seen_names:
+                    continue
+                seen_names.add(name)
                 joint_names: list[str] | None = rest[0] if len(rest) > 0 else None
                 djp: list[float] | None = rest[1] if len(rest) > 1 else None
                 handle = self.add_policy(
