@@ -38,7 +38,7 @@ register_command_term(
     CommandTermSpec(
         ts_name="LiftingCommand",
         ts_src=os.path.join(_CMD_DIR, "LiftingCommand.ts"),
-        serializer=lambda cfg: asdict(cfg),
+        serializer=asdict,
     ),
 )
 register_obs_func(
