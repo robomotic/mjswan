@@ -70,15 +70,15 @@ TASK_CONFIG = {
     #         azimuth=-90,
     #     ),
     # },
-    "Mjlab-Lift-Cube-Yam": {
-        "wandb_run_id": "ajfybu8m",
-        "viewer_cfg": ViewerConfig(
-            lookat=(0.0, 0.0, 0.4),
-            distance=3,
-            elevation=-20,
-            azimuth=30,
-        ),
-    },
+    # "Mjlab-Lift-Cube-Yam": {
+    #     "wandb_run_id": "ajfybu8m",
+    #     "viewer_cfg": ViewerConfig(
+    #         lookat=(0.0, 0.0, 0.4),
+    #         distance=3,
+    #         elevation=-20,
+    #         azimuth=30,
+    #     ),
+    # },
     # "Mjlab-Velocity-Flat-Unitree-G1": {
     #     "wandb_run_id": "vel-flat-g1",
     #     "viewer_cfg": ViewerConfig(
@@ -97,15 +97,15 @@ TASK_CONFIG = {
     #         azimuth=30,
     #     ),
     # },
-    # "Mjlab-Velocity-Rough-Unitree-G1": {
-    #     "wandb_run_id": "mowqlkd5",
-    #     "viewer_cfg": ViewerConfig(
-    #         lookat=(0.0, 0.0, 0.4),
-    #         distance=3,
-    #         elevation=-20,
-    #         azimuth=30,
-    #     ),
-    # },
+    "Mjlab-Velocity-Rough-Unitree-G1": {
+        "wandb_run_id": ["mowqlkd5", "sif72y3p", "rsb8tc3g", "7veqaznf"],
+        "viewer_cfg": ViewerConfig(
+            lookat=(0.0, 0.0, 0.4),
+            distance=3,
+            elevation=-20,
+            azimuth=30,
+        ),
+    },
     # "Mjlab-Velocity-Rough-Unitree-Go1": {
     #     "wandb_run_id": "vel-rough-go1",
     # },
@@ -120,8 +120,12 @@ def main():
         env_cfg = load_env_cfg(task_id)
         scene = project.add_mjlab_scene(task_id)
         scene = scene.set_viewer_config(config["viewer_cfg"])
+        run_ids = config["wandb_run_id"]
+        if isinstance(run_ids, str):
+            run_ids = [run_ids]
+        wandb_paths = [f"{ENTITY}/{PROJECT}/{rid}" for rid in run_ids]
         policies = scene.add_policy_from_wandb(
-            f"{ENTITY}/{PROJECT}/{config['wandb_run_id']}",
+            wandb_paths,
             task_id=task_id,
             observations={"policy": env_cfg.observations["actor"]},
             commands=env_cfg.commands,
