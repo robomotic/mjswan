@@ -103,8 +103,13 @@ export class ObjectToGoalDistance extends ObservationBase {
       let end = start;
       while (namesArray[end] !== 0) end++;
       const name = decoder.decode(namesArray.slice(start, end));
-      if (name === bodyName) return b;
+      // Exact match or mjlab entity-namespaced match ({entity}/{body})
+      if (name === bodyName || name === `${bodyName}/${bodyName}`) return b;
       allNames.push(name);
+    }
+    // Fallback: first body whose name starts with "{bodyName}/"
+    for (let b = 0; b < allNames.length; b++) {
+      if (allNames[b].startsWith(`${bodyName}/`)) return b + (allNames[0] === '' ? 1 : 0);
     }
     console.warn(`ObjectToGoalDistance: body "${bodyName}" not found. Available bodies: ${allNames.join(', ')}`);
     return 1;

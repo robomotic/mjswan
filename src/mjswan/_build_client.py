@@ -226,6 +226,74 @@ class ClientBuilder:
 
         output_path.write_text("\n".join(lines))
 
+    def generate_custom_commands(self) -> None:
+        """Generate custom_commands.ts from user-registered command terms."""
+        from mjswan.command import _custom_registry
+
+        output_path = (
+            self.project_dir / "src" / "core" / "command" / "custom_commands.ts"
+        )
+
+        custom_entries = {
+            name: spec
+            for name, spec in _custom_registry.items()
+            if spec.ts_src is not None and spec.ts_name
+        }
+
+        if not custom_entries:
+            output_path.write_text(
+                "// Custom command terms registered via"
+                " mjswan.register_command_term().\n"
+                "// This file is auto-generated at build time — do not edit manually.\n"
+                "\n"
+                "import type { CommandTermConstructor } from './types';\n"
+                "\n"
+                "export const CustomCommands:"
+                " Record<string, CommandTermConstructor> = {};\n"
+            )
+            return
+
+        lines = [
+            "// Custom command terms registered via mjswan.register_command_term().",
+            "// This file is auto-generated at build time — do not edit manually.",
+            "",
+            "import type { CommandTermConstructor } from './types';",
+            "",
+        ]
+
+        seen_imports: list[str] = []
+        class_bodies: list[str] = []
+        class_names: list[str] = []
+        for spec in custom_entries.values():
+            src_path = Path(spec.ts_src).expanduser().resolve()  # type: ignore[arg-type]
+            if not src_path.exists():
+                raise FileNotFoundError(f"Custom command ts_src not found: {src_path}")
+            src_lines = src_path.read_text().splitlines()
+            body_lines = []
+            for src_line in src_lines:
+                if src_line.startswith("import "):
+                    if src_line not in seen_imports:
+                        seen_imports.append(src_line)
+                else:
+                    body_lines.append(src_line)
+            class_bodies.append("\n".join(body_lines).strip())
+            class_names.append(spec.ts_name)
+
+        lines.extend(seen_imports)
+        lines.append("")
+        for body in class_bodies:
+            lines.append(body)
+            lines.append("")
+        lines.append(
+            "export const CustomCommands: Record<string, CommandTermConstructor> = {"
+        )
+        for cls in class_names:
+            lines.append(f"  {cls},")
+        lines.append("};")
+        lines.append("")
+
+        output_path.write_text("\n".join(lines))
+
     def generate_viewer_config_defaults(self) -> None:
         """Generate viewer_config_defaults.ts from Python ViewerConfig defaults."""
         from mjswan.viewer_config import ViewerConfig
@@ -263,6 +331,7 @@ class ClientBuilder:
             self.create_env(clean=clean)
             self.sync_version_from_python()
             self.generate_custom_observations()
+            self.generate_custom_commands()
             self.generate_viewer_config_defaults()
             self.install_dependencies(clean=clean)
             env: dict[str, str] = {"MJSWAN_BASE_PATH": base_path}

@@ -1,5 +1,7 @@
 import type { MainModule, MjData, MjModel } from '@mujoco/mujoco';
 
+import type { CommandsConfig } from '../command';
+
 export type PolicyRunnerContext = {
   mujoco: MainModule;
   mjModel: MjModel | null;
@@ -61,6 +63,7 @@ export type PolicyConfig = {
       out_keys?: (string | string[])[];
     };
   };
+  commands?: CommandsConfig;
   observations?: Record<string, ObservationGroupConfig>;
   actions?: Record<string, ActionConfigEntry>;
   terminations?: Record<string, TerminationConfigEntry>;

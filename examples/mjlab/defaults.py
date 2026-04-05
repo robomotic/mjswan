@@ -5,6 +5,7 @@ in the browser using mjswan.
 """
 
 import os
+from dataclasses import asdict
 
 from mjlab.tasks.registry import (  # noqa: F401 - for task registrations
     _REGISTRY,
@@ -12,17 +13,32 @@ from mjlab.tasks.registry import (  # noqa: F401 - for task registrations
 )
 
 import mjswan
-from mjswan import ObsFunc, ViewerConfig, register_obs_func
+from mjswan import (
+    CommandTermSpec,
+    ObsFunc,
+    ViewerConfig,
+    register_command_term,
+    register_obs_func,
+)
 from mjswan.envs.mdp import observations as obs_fns
 
 pole_angle_cos_sin = obs_fns.joint_pos_cos_sin  # cartpole semantic alias
 
 _OBS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "observations")
+_CMD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "commands")
 register_obs_func(
     "ee_to_object_distance",
     ObsFunc(
         ts_name="EeToObjectDistance",
         ts_src=os.path.join(_OBS_DIR, "EeToObjectDistance.ts"),
+    ),
+)
+register_command_term(
+    "LiftingCommandCfg",
+    CommandTermSpec(
+        ts_name="LiftingCommand",
+        ts_src=os.path.join(_CMD_DIR, "LiftingCommand.ts"),
+        serializer=lambda cfg: asdict(cfg),
     ),
 )
 register_obs_func(
@@ -108,6 +124,7 @@ def main():
             f"{ENTITY}/{PROJECT}/{config['wandb_run_id']}",
             task_id=task_id,
             observations={"policy": env_cfg.observations["actor"]},
+            commands=env_cfg.commands,
             actions=env_cfg.actions,
             terminations=env_cfg.terminations,
         )

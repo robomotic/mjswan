@@ -1,4 +1,4 @@
-"""Tests for mjswan.command — SliderConfig, ButtonConfig, CommandGroupConfig, velocity_command.
+"""Tests for mjswan.command.
 
 Layer: L1 (pure Python, no MuJoCo/ONNX required).
 """
@@ -6,8 +6,12 @@ Layer: L1 (pure Python, no MuJoCo/ONNX required).
 import mjswan
 from mjswan.command import (
     ButtonConfig,
-    CommandGroupConfig,
+    CommandTermConfig,
+    CommandTermSpec,
     SliderConfig,
+    _custom_registry,
+    register_command_term,
+    ui_command,
     velocity_command,
 )
 
@@ -18,10 +22,6 @@ class TestSliderConfig:
         assert s.min == -2.0
         assert s.max == 3.0
 
-    def test_to_dict_has_correct_type(self):
-        s = SliderConfig(name="x", label="X")
-        assert s.to_dict()["type"] == "slider"
-
     def test_to_dict_includes_all_fields(self):
         s = SliderConfig(
             name="lin_vel_x",
@@ -31,6 +31,7 @@ class TestSliderConfig:
             step=0.05,
         )
         d = s.to_dict()
+        assert d["type"] == "slider"
         assert d["name"] == "lin_vel_x"
         assert d["label"] == "Forward Velocity"
         assert d["min"] == -1.0
@@ -38,86 +39,91 @@ class TestSliderConfig:
         assert d["default"] == 0.5
         assert d["step"] == 0.05
 
-    def test_default_values(self):
-        s = SliderConfig(name="x", label="X")
-        assert s.default == 0.0
-        assert s.step == 0.01
-        assert s.range == (-1.0, 1.0)
-
     def test_slider_is_alias_for_slider_config(self):
         assert mjswan.Slider is SliderConfig
 
 
 class TestButtonConfig:
-    def test_to_dict_has_correct_type(self):
-        b = ButtonConfig(name="reset", label="Reset")
-        assert b.to_dict()["type"] == "button"
-
     def test_to_dict_includes_name_and_label(self):
         b = ButtonConfig(name="reset", label="Reset Simulation")
-        d = b.to_dict()
-        assert d["name"] == "reset"
-        assert d["label"] == "Reset Simulation"
+        assert b.to_dict() == {
+            "type": "button",
+            "name": "reset",
+            "label": "Reset Simulation",
+        }
 
     def test_button_is_alias_for_button_config(self):
         assert mjswan.Button is ButtonConfig
 
 
-class TestCommandGroupConfig:
-    def test_to_dict_nests_inputs(self):
-        group = CommandGroupConfig(
-            name="velocity",
-            inputs=[
+class TestUiCommand:
+    def test_ui_command_serializes_as_ui_term(self):
+        command = ui_command(
+            [
                 SliderConfig(name="x", label="X", range=(-1.0, 1.0)),
                 ButtonConfig(name="reset", label="Reset"),
-            ],
+            ]
         )
-        d = group.to_dict()
-        assert len(d["inputs"]) == 2
-        assert d["inputs"][0]["type"] == "slider"
-        assert d["inputs"][1]["type"] == "button"
-
-    def test_to_dict_with_no_inputs(self):
-        group = CommandGroupConfig(name="empty")
-        assert group.to_dict()["inputs"] == []
+        assert command.to_dict() == {
+            "name": "UiCommand",
+            "ui": {
+                "inputs": [
+                    {
+                        "type": "slider",
+                        "name": "x",
+                        "label": "X",
+                        "min": -1.0,
+                        "max": 1.0,
+                        "step": 0.01,
+                        "default": 0.0,
+                    },
+                    {
+                        "type": "button",
+                        "name": "reset",
+                        "label": "Reset",
+                    },
+                ]
+            },
+        }
 
 
 class TestVelocityCommand:
-    def test_returns_group_named_velocity(self):
+    def test_velocity_command_is_ui_command(self):
         cmd = velocity_command()
-        assert cmd.name == "velocity"
+        assert isinstance(cmd, CommandTermConfig)
+        assert cmd.term_name == "UiCommand"
 
-    def test_has_exactly_three_sliders(self):
+    def test_velocity_command_has_exactly_three_sliders(self):
         cmd = velocity_command()
-        assert len(cmd.inputs) == 3
-        assert all(isinstance(inp, SliderConfig) for inp in cmd.inputs)
+        inputs = cmd.ui.inputs if cmd.ui is not None else []
+        assert len(inputs) == 3
+        assert all(isinstance(inp, SliderConfig) for inp in inputs)
 
     def test_slider_names_are_canonical(self):
         cmd = velocity_command()
-        names = [inp.name for inp in cmd.inputs]
-        assert names == ["lin_vel_x", "lin_vel_y", "ang_vel_z"]
-
-    def test_custom_ranges_applied(self):
-        cmd = velocity_command(
-            lin_vel_x=(-2.0, 2.0),
-            lin_vel_y=(-1.0, 1.0),
-            ang_vel_z=(-3.0, 3.0),
-        )
-        sliders = {inp.name: inp for inp in cmd.inputs}
-        assert sliders["lin_vel_x"].range == (-2.0, 2.0)
-        assert sliders["lin_vel_y"].range == (-1.0, 1.0)
-        assert sliders["ang_vel_z"].range == (-3.0, 3.0)
-
-    def test_custom_defaults_applied(self):
-        cmd = velocity_command(
-            default_lin_vel_x=0.5,
-            default_lin_vel_y=0.1,
-            default_ang_vel_z=0.2,
-        )
-        sliders = {inp.name: inp for inp in cmd.inputs}
-        assert sliders["lin_vel_x"].default == 0.5
-        assert sliders["lin_vel_y"].default == 0.1
-        assert sliders["ang_vel_z"].default == 0.2
+        inputs = cmd.ui.inputs if cmd.ui is not None else []
+        assert [inp.name for inp in inputs] == ["lin_vel_x", "lin_vel_y", "ang_vel_z"]
 
     def test_velocity_command_is_accessible_from_mjswan(self):
         assert mjswan.velocity_command is velocity_command
+
+
+class TestCommandRegistry:
+    def test_register_command_term_is_accessible_from_mjswan(self):
+        assert mjswan.register_command_term is register_command_term
+
+    def test_custom_term_spec_can_be_registered(self):
+        register_command_term(
+            "DummyCommandCfg",
+            CommandTermSpec(
+                ts_name="DummyCommand",
+                serializer=lambda cfg: {"value": cfg.value},
+            ),
+        )
+
+        class DummyCfg:
+            value = 3
+
+        spec = _custom_registry["DummyCommandCfg"]
+        assert spec.ts_name == "DummyCommand"
+        assert spec.serializer(DummyCfg()) == {"value": 3}

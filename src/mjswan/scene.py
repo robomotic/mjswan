@@ -17,6 +17,7 @@ import onnx
 
 from .adapters import (
     adapt_actions,
+    adapt_commands,
     adapt_observations,
     adapt_terminations,
     resolve_action_scales,
@@ -200,6 +201,7 @@ class SceneHandle:
         source_path: str | None = None,
         config_path: str | None = None,
         observations: dict[str, ObservationGroupCfg] | dict[str, Any] | None = None,
+        commands: Mapping[str, Any] | None = None,
         actions: Mapping[str, ActionTermCfg] | Mapping[str, Any] | None = None,
         terminations: dict[str, TerminationTermCfg] | dict[str, Any] | None = None,
         policy_joint_names: list[str] | None = None,
@@ -216,6 +218,9 @@ class SceneHandle:
             observations: Observation group configurations.  Accepts both
                 mjswan and mjlab ``ObservationGroupCfg`` instances — mjlab
                 types are converted automatically (mjlab is a soft dependency).
+            commands: Command term configurations. Accepts both mjswan and
+                mjlab ``CommandTermCfg`` instances. Custom mjlab terms are
+                converted through the Python command-term registry.
             actions: Action term configurations.  Accepts both mjswan and
                 mjlab ``ActionTermCfg`` subclass instances.
             terminations: Termination term configurations.  Accepts both
@@ -255,6 +260,7 @@ class SceneHandle:
 
         # Adapt mjlab types to mjswan internals (no-op if already mjswan)
         adapted_observations = adapt_observations(observations)
+        adapted_commands = adapt_commands(commands)
         adapted_actions = adapt_actions(actions)
         adapted_terminations = adapt_terminations(terminations)
         _enrich_joint_observations(self._config, adapted_observations)
@@ -267,6 +273,7 @@ class SceneHandle:
             metadata=metadata,
             source_path=source_path,
             config_path=config_path,
+            commands=adapted_commands or {},
             observations=adapted_observations,
             actions=adapted_actions,
             terminations=adapted_terminations,
@@ -285,12 +292,14 @@ class SceneHandle:
         config_path: str | None = None,
         metadata: dict[str, Any] | None = None,
         observations: dict[str, ObservationGroupCfg] | dict[str, Any] | None = None,
+        commands: Mapping[str, Any] | None = None,
         actions: Mapping[str, ActionTermCfg] | Mapping[str, Any] | None = None,
         terminations: dict[str, TerminationTermCfg] | dict[str, Any] | None = None,
     ) -> list[PolicyHandle]:
         """Add ONNX policies fetched from one or more W&B runs to this scene.
 
-        ``config_path``, ``observations``, ``actions``, and ``terminations`` are
+        ``config_path``, ``observations``, ``commands``, ``actions``, and
+        ``terminations`` are
         applied identically to every policy fetched from every run.
 
         Args:
@@ -309,6 +318,7 @@ class SceneHandle:
                 policies.
             observations: Observation group configurations applied to all
                 fetched policies.
+            commands: Command term configurations applied to all fetched policies.
             actions: Action term configurations applied to all fetched policies.
             terminations: Termination term configurations applied to all fetched
                 policies.
@@ -364,38 +374,49 @@ class SceneHandle:
 
         run_paths = [run_path] if isinstance(run_path, str) else run_path
 
-        if only_latest:
-            from .wandb_utils import fetch_onnx_from_wandb_run
-        else:
-            from .wandb_utils import fetch_pt_onnx_from_wandb_run
-
         handles = []
         seen_names: set[str] = set()
         for path in run_paths:
             if only_latest:
-                entries = fetch_onnx_from_wandb_run(path)
-            else:
-                entries = fetch_pt_onnx_from_wandb_run(path, task_id)
+                from .wandb_utils import fetch_onnx_from_wandb_run
 
-            for entry in entries:
-                name, model, *rest = entry
-                if name in seen_names:
-                    continue
-                seen_names.add(name)
-                joint_names: list[str] | None = rest[0] if len(rest) > 0 else None
-                djp: list[float] | None = rest[1] if len(rest) > 1 else None
-                handle = self.add_policy(
-                    name=name,
-                    policy=model,
-                    config_path=config_path,
-                    metadata=metadata,
-                    observations=observations,
-                    actions=actions,
-                    terminations=terminations,
-                    policy_joint_names=joint_names,
-                    default_joint_pos=djp,
-                )
-                handles.append(handle)
+                name, model = fetch_onnx_from_wandb_run(path)
+                if name not in seen_names:
+                    seen_names.add(name)
+                    handle = self.add_policy(
+                        name=name,
+                        policy=model,
+                        config_path=config_path,
+                        metadata=metadata,
+                        observations=observations,
+                        commands=commands,
+                        actions=actions,
+                        terminations=terminations,
+                    )
+                    handles.append(handle)
+            else:
+                assert task_id is not None
+                from .wandb_utils import fetch_pt_onnx_from_wandb_run
+
+                for name, model, joint_names, djp in fetch_pt_onnx_from_wandb_run(
+                    path, task_id
+                ):
+                    if name in seen_names:
+                        continue
+                    seen_names.add(name)
+                    handle = self.add_policy(
+                        name=name,
+                        policy=model,
+                        config_path=config_path,
+                        metadata=metadata,
+                        observations=observations,
+                        commands=commands,
+                        actions=actions,
+                        terminations=terminations,
+                        policy_joint_names=joint_names or None,
+                        default_joint_pos=djp or None,
+                    )
+                    handles.append(handle)
         return handles
 
     def add_splat(

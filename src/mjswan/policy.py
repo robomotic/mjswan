@@ -12,7 +12,8 @@ from typing import TYPE_CHECKING, Any
 
 import onnx
 
-from .command import CommandGroupConfig, CommandInput, velocity_command
+from .adapters import adapt_commands
+from .command import CommandInput, CommandTermConfig, ui_command, velocity_command
 
 if TYPE_CHECKING:
     from .envs.mdp.actions.actions import ActionTermCfg
@@ -40,8 +41,8 @@ class PolicyConfig:
     config_path: str | None = None
     """Optional source path for the policy config JSON file."""
 
-    commands: dict[str, CommandGroupConfig] = field(default_factory=dict)
-    """Command groups for user-controlled inputs."""
+    commands: dict[str, CommandTermConfig] = field(default_factory=dict)
+    """Command terms keyed by their policy-visible names."""
 
     observations: dict[str, ObservationGroupCfg] | None = None
     """Observation group configurations (mjlab-compatible).
@@ -148,8 +149,24 @@ class PolicyHandle:
                 ]
             )
         """
-        command_group = CommandGroupConfig(name=name, inputs=list(inputs))
-        self._config.commands[name] = command_group
+        self._config.commands[name] = ui_command(list(inputs))
+        return self
+
+    def add_command_term(
+        self,
+        name: str,
+        term: CommandTermConfig | Any,
+    ) -> PolicyHandle:
+        """Add a command term directly.
+
+        Accepts either an mjswan ``CommandTermConfig`` or an mjlab
+        ``CommandTermCfg`` registered via ``mjswan.register_command_term()``.
+        """
+
+        adapted = adapt_commands({name: term})
+        if adapted is None or name not in adapted:
+            raise ValueError(f"Failed to adapt command term '{name}'.")
+        self._config.commands[name] = adapted[name]
         return self
 
     def add_velocity_command(
@@ -185,9 +202,8 @@ class PolicyHandle:
             default_lin_vel_x=default_lin_vel_x,
             default_lin_vel_y=default_lin_vel_y,
             default_ang_vel_z=default_ang_vel_z,
-            name=name,
         )
-        self._config.commands[cmd.name] = cmd
+        self._config.commands[name] = cmd
         return self
 
     def set_metadata(self, key: str, value: Any) -> PolicyHandle:

@@ -12,7 +12,7 @@ import pytest
 
 import mjswan
 from mjswan.builder import Builder
-from mjswan.command import SliderConfig
+from mjswan.command import CommandTermConfig, SliderConfig
 from mjswan.project import _collect_mjlab_scene_assets
 from mjswan.scene import SceneConfig
 
@@ -165,6 +165,7 @@ class TestPolicyHandle:
         policy.add_velocity_command()
         commands = builder.get_projects()[0].scenes[0].policies[0].commands
         assert "velocity" in commands
+        assert commands["velocity"].term_name == "UiCommand"
 
     def test_add_velocity_command_returns_self_for_chaining(
         self, minimal_model, minimal_onnx
@@ -181,12 +182,24 @@ class TestPolicyHandle:
         )
         commands = builder.get_projects()[0].scenes[0].policies[0].commands
         assert "custom" in commands
-        assert len(commands["custom"].inputs) == 1
+        assert commands["custom"].ui is not None
+        assert len(commands["custom"].ui.inputs) == 1
 
     def test_add_command_returns_self_for_chaining(self, minimal_model, minimal_onnx):
         _, policy = self._make_policy(minimal_model, minimal_onnx)
         result = policy.add_command(name="cmd", inputs=[])
         assert result is policy
+
+    def test_add_command_term_stores_serialized_term(self, minimal_model, minimal_onnx):
+        builder, policy = self._make_policy(minimal_model, minimal_onnx)
+        result = policy.add_command_term(
+            name="goal",
+            term=CommandTermConfig(term_name="DummyCommand", params={"value": 1}),
+        )
+        commands = builder.get_projects()[0].scenes[0].policies[0].commands
+        assert result is policy
+        assert commands["goal"].term_name == "DummyCommand"
+        assert commands["goal"].params["value"] == 1
 
     def test_set_metadata_stores_value(self, minimal_model, minimal_onnx):
         builder, policy = self._make_policy(minimal_model, minimal_onnx)

@@ -30,6 +30,8 @@ import warnings
 from collections.abc import Mapping
 from typing import Any
 
+from ..command import CommandTermConfig as MjswanCommandTermConfig
+from ..command import _custom_registry as _custom_command_registry
 from ..envs.mdp import actions as _actions_module
 from ..envs.mdp import observations as _obs_module
 from ..envs.mdp import terminations as _term_module
@@ -237,6 +239,56 @@ def adapt_terminations(
         else term
         for key, term in terminations.items()
     }
+
+
+# ---------------------------------------------------------------------------
+# Command adaptation
+# ---------------------------------------------------------------------------
+
+
+def _adapt_command_cfg(term: Any) -> MjswanCommandTermConfig:
+    """Convert a single mjlab ``CommandTermCfg`` to mjswan."""
+
+    if isinstance(term, MjswanCommandTermConfig):
+        return term
+
+    class_name = type(term).__name__
+    spec = _custom_command_registry.get(class_name)
+    if spec is None:
+        raise ValueError(
+            f"No mjswan mapping for mjlab command config '{class_name}'. "
+            f"Register one with mjswan.register_command_term()."
+        )
+
+    serialized = dict(spec.serializer(term))
+    return MjswanCommandTermConfig(term_name=spec.ts_name, params=serialized)
+
+
+def adapt_commands(
+    commands: Mapping[str, Any] | None,
+) -> dict[str, MjswanCommandTermConfig] | None:
+    """Adapt command configs, converting mjlab types if detected."""
+
+    if commands is None:
+        return None
+
+    adapted: dict[str, MjswanCommandTermConfig] = {}
+    for key, term in commands.items():
+        if isinstance(term, MjswanCommandTermConfig):
+            adapted[key] = term
+            continue
+        if _is_from_mjlab(term):
+            try:
+                adapted[key] = _adapt_command_cfg(term)
+            except ValueError as exc:
+                warnings.warn(
+                    f"Skipping command term '{key}': {exc}",
+                    category=RuntimeWarning,
+                    stacklevel=2,
+                )
+            continue
+        adapted[key] = term
+    return adapted
 
 
 # ---------------------------------------------------------------------------

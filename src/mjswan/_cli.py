@@ -38,8 +38,8 @@ def splat() -> None:
 
 
 def mjlab() -> None:
-    """Run examples/mjlab/mjlab_integration.py"""
-    _run_script("examples/mjlab/mjlab_integration.py")
+    """Run examples/mjlab/defaults.py"""
+    _run_script("examples/mjlab/defaults.py")
 
 
 def serve() -> None:

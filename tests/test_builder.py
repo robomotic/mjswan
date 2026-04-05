@@ -344,6 +344,18 @@ class TestSaveWebPolicyJson:
         data = self._policy_json(self._run(builder, tmp_path), "Policy")
         assert data["onnx"]["path"] == "policy.onnx"
 
+    def test_no_config_path_commands_emitted_as_command_terms(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(name="Policy", policy=minimal_onnx).add_velocity_command()
+
+        data = self._policy_json(self._run(builder, tmp_path), "Policy")
+        assert data["commands"]["velocity"]["name"] == "UiCommand"
+        assert len(data["commands"]["velocity"]["ui"]["inputs"]) == 3
+        assert data["commands"]["velocity"]["ui"]["inputs"][0]["name"] == "lin_vel_x"
+
     def test_joint_observation_terms_are_enriched_from_scene_spec(
         self, tmp_path, minimal_onnx
     ):

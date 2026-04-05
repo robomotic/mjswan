@@ -10,10 +10,14 @@ from .builder import Builder
 from .command import (
     Button,
     ButtonConfig,
-    CommandGroupConfig,
     CommandInput,
+    CommandTermConfig,
+    CommandTermSpec,
+    CommandUiConfig,
     Slider,
     SliderConfig,
+    register_command_term,
+    ui_command,
     velocity_command,
 )
 from .envs.mdp.actions import (
@@ -60,7 +64,11 @@ __all__ = [
     "SliderConfig",
     "Button",
     "ButtonConfig",
-    "CommandGroupConfig",
     "CommandInput",
+    "CommandTermConfig",
+    "CommandTermSpec",
+    "CommandUiConfig",
+    "register_command_term",
+    "ui_command",
     "velocity_command",
 ]

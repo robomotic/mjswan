@@ -1,212 +1,153 @@
-/**
- * CommandManager - Manages user commands that can be sent to the policy.
- *
- * Commands are user inputs (like velocity targets) that get passed to the
- * ONNX policy as part of the observation. The CommandManager:
- * - Defines available commands with their types and ranges
- * - Stores current command values grouped by command group name
- * - Provides an interface for UI components to update values
- * - Provides observation values for the policy via getCommand(groupName)
- *
- * Command groups are defined in the policy config JSON and loaded when the policy
- * is initialized. Observations access commands by group name (like mjlab pattern).
- */
+import { CustomCommands } from './custom_commands';
+import type {
+  ButtonCommandConfig,
+  CommandConfigEntry,
+  CommandDefinition,
+  CommandEvent,
+  CommandEventListener,
+  CommandInputConfig,
+  CommandTerm,
+  CommandTermConstructor,
+  CommandTermContext,
+  CommandsConfig,
+  SliderCommandConfig,
+} from './types';
 
-export type CommandType = 'slider' | 'button';
+class UiCommand implements CommandTerm {
+  private readonly inputs: CommandInputConfig[];
+  private readonly values: Map<string, number>;
 
-export interface SliderCommandConfig {
-  type: 'slider';
-  name: string;
-  label: string;
-  min: number;
-  max: number;
-  step: number;
-  default: number;
+  constructor(
+    _termName: string,
+    config: CommandConfigEntry,
+    // _context: CommandTermContext
+  ) {
+    this.inputs = Array.isArray(config.ui?.inputs) ? config.ui.inputs : [];
+    this.values = new Map();
+    for (const input of this.inputs) {
+      if (input.type === 'slider') {
+        this.values.set(input.name, input.default);
+      }
+    }
+  }
+
+  getCommand(): Float32Array {
+    const sliderInputs = this.inputs.filter((input): input is SliderCommandConfig => input.type === 'slider');
+    const values = new Float32Array(sliderInputs.length);
+    for (let i = 0; i < sliderInputs.length; i++) {
+      values[i] = this.values.get(sliderInputs[i].name) ?? sliderInputs[i].default ?? 0.0;
+    }
+    return values;
+  }
+
+  getUiConfig() {
+    return { inputs: this.inputs };
+  }
+
+  reset(): void {
+    for (const input of this.inputs) {
+      if (input.type === 'slider') {
+        this.values.set(input.name, input.default);
+      }
+    }
+  }
+
+  setValue(inputName: string, value: number): number {
+    const input = this.inputs.find(
+      (entry): entry is SliderCommandConfig => entry.type === 'slider' && entry.name === inputName
+    );
+    if (!input) {
+      return 0.0;
+    }
+    const clamped = Math.max(input.min, Math.min(input.max, value));
+    this.values.set(input.name, clamped);
+    return clamped;
+  }
 }
 
-export interface ButtonCommandConfig {
-  type: 'button';
-  name: string;
-  label: string;
-}
-
-export type CommandInputConfig = SliderCommandConfig | ButtonCommandConfig;
-
-/**
- * Command group configuration from policy config JSON
- */
-export interface CommandGroupConfig {
-  inputs: CommandInputConfig[];
-}
-
-/**
- * Commands section from policy config JSON
- */
-export type CommandsConfig = Record<string, CommandGroupConfig>;
-
-export interface CommandDefinition {
-  id: string;
-  groupName: string;
-  config: CommandInputConfig;
-}
-
-export type CommandEventType = 'change' | 'reset' | 'button' | 'group_registered' | 'clear';
-
-export interface CommandEvent {
-  type: CommandEventType;
-  commandId: string;
-  groupName?: string;
-  value?: number;
-}
-
-export type CommandEventListener = (event: CommandEvent) => void;
-
-/**
- * Default velocity command configuration (for backwards compatibility)
- */
-export const DEFAULT_VELOCITY_COMMANDS: CommandInputConfig[] = [
-  {
-    type: 'slider',
-    name: 'lin_vel_x',
-    label: 'Forward Velocity',
-    min: -1.0,
-    max: 1.0,
-    step: 0.05,
-    default: 0.5,
-  },
-  {
-    type: 'slider',
-    name: 'lin_vel_y',
-    label: 'Lateral Velocity',
-    min: -0.5,
-    max: 0.5,
-    step: 0.05,
-    default: 0.0,
-  },
-  {
-    type: 'slider',
-    name: 'ang_vel_z',
-    label: 'Yaw Rate',
-    min: -1.0,
-    max: 1.0,
-    step: 0.05,
-    default: 0.0,
-  },
-];
+const BuiltinCommandTerms: Record<string, CommandTermConstructor> = {
+  UiCommand,
+};
 
 export class CommandManager {
+  private terms: Map<string, CommandTerm> = new Map();
   private commands: Map<string, CommandDefinition> = new Map();
-  private commandGroups: Map<string, string[]> = new Map(); // groupName -> list of command ids
+  private commandGroups: Map<string, string[]> = new Map();
   private values: Map<string, number> = new Map();
   private listeners: Set<CommandEventListener> = new Set();
   private resetCallback: (() => void) | null = null;
 
   constructor() {
-    // Reset command is always available by default
-    this.registerCommand('_system', {
-      type: 'button',
-      name: 'reset',
-      label: 'Reset Simulation',
-    });
+    this.registerSystemReset();
   }
 
-  /**
-   * Register a single command input under a group
-   */
-  registerCommand(groupName: string, config: CommandInputConfig): void {
-    const id = `${groupName}:${config.name}`;
-    this.commands.set(id, { id, groupName, config });
+  initialize(commandsConfig: CommandsConfig, context: CommandTermContext): void {
+    this.clear();
+    const registry: Record<string, CommandTermConstructor> = {
+      ...BuiltinCommandTerms,
+      ...CustomCommands,
+    };
 
-    // Track command in group
-    if (!this.commandGroups.has(groupName)) {
-      this.commandGroups.set(groupName, []);
-    }
-    this.commandGroups.get(groupName)!.push(id);
-
-    // Initialize slider values to default
-    if (config.type === 'slider') {
-      this.values.set(id, config.default);
+    for (const [groupName, entry] of Object.entries(commandsConfig)) {
+      const Term = registry[entry.name];
+      if (!Term) {
+        throw new Error(`Unknown command term: ${entry.name}`);
+      }
+      const term = new Term(groupName, entry, context);
+      this.terms.set(groupName, term);
+      this.registerUi(groupName, term);
     }
   }
 
-  /**
-   * Register a command group from policy config
-   * This is the main method called when loading a policy config
-   */
-  registerCommandGroup(groupName: string, groupConfig: CommandGroupConfig): void {
-    for (const inputConfig of groupConfig.inputs) {
-      this.registerCommand(groupName, inputConfig);
-    }
-
-    this.emit({
-      type: 'group_registered',
-      commandId: groupName,
-      groupName,
-    });
-  }
-
-  /**
-   * Register all command groups from a commands config section
-   */
-  registerCommandsFromConfig(commandsConfig: CommandsConfig): void {
-    for (const [groupName, groupConfig] of Object.entries(commandsConfig)) {
-      this.registerCommandGroup(groupName, groupConfig);
+  update(dt: number): void {
+    for (const term of this.terms.values()) {
+      term.update?.(dt);
     }
   }
 
-  /**
-   * Get all registered command groups
-   */
+  updateDebugVisuals(): void {
+    for (const term of this.terms.values()) {
+      term.updateDebugVisuals?.();
+    }
+  }
+
+  resetTerms(): void {
+    for (const term of this.terms.values()) {
+      term.reset?.();
+    }
+    this.syncValuesFromTerms();
+    this.emit({ type: 'reset', commandId: '*' });
+  }
+
   getCommandGroups(): string[] {
     return Array.from(this.commandGroups.keys()).filter(name => name !== '_system');
   }
 
-  /**
-   * Get all commands in a group
-   */
   getCommandsInGroup(groupName: string): CommandDefinition[] {
     const ids = this.commandGroups.get(groupName) ?? [];
     return ids.map(id => this.commands.get(id)!).filter(Boolean);
   }
 
-  /**
-   * Get all registered commands (excluding system commands)
-   */
   getCommands(): CommandDefinition[] {
     return Array.from(this.commands.values()).filter(cmd => cmd.groupName !== '_system');
   }
 
-  /**
-   * Get all commands including system commands (for UI)
-   */
   getAllCommands(): CommandDefinition[] {
     return Array.from(this.commands.values());
   }
 
-  /**
-   * Get the reset button command
-   */
   getResetCommand(): CommandDefinition | undefined {
     return this.commands.get('_system:reset');
   }
 
-  /**
-   * Get a specific command by full ID (groupName:name)
-   */
   getCommandById(id: string): CommandDefinition | undefined {
     return this.commands.get(id);
   }
 
-  /**
-   * Get the current value of a slider command
-   */
   getValue(id: string): number {
     return this.values.get(id) ?? 0;
   }
 
-  /**
-   * Get all current slider values
-   */
   getValues(): Record<string, number> {
     const result: Record<string, number> = {};
     for (const [id, value] of this.values) {
@@ -215,67 +156,39 @@ export class CommandManager {
     return result;
   }
 
-  /**
-   * Get command values for a group as a Float32Array (for observations)
-   * Values are returned in the order they were registered (same as inputs array order)
-   *
-   * This is the main method used by GeneratedCommandsObservation
-   */
   getCommand(groupName: string): Float32Array {
-    const ids = this.commandGroups.get(groupName) ?? [];
-    const sliderIds = ids.filter(id => {
-      const cmd = this.commands.get(id);
-      return cmd?.config.type === 'slider';
-    });
-
-    const values = new Float32Array(sliderIds.length);
-    for (let i = 0; i < sliderIds.length; i++) {
-      values[i] = this.values.get(sliderIds[i]) ?? 0;
-    }
-    return values;
+    const term = this.terms.get(groupName);
+    return term ? term.getCommand() : new Float32Array(0);
   }
 
-  /**
-   * Get velocity command values as an array [lin_vel_x, lin_vel_y, ang_vel_z]
-   * For backwards compatibility with existing observations
-   */
   getVelocityCommand(): Float32Array {
-    // Try to get from 'velocity' group first
-    if (this.commandGroups.has('velocity')) {
+    if (this.terms.has('velocity')) {
       return this.getCommand('velocity');
     }
-
-    // Fallback to legacy hardcoded names
-    const linVelX = this.values.get('velocity:lin_vel_x') ?? this.values.get('_legacy:vel_x') ?? 0.5;
-    const linVelY = this.values.get('velocity:lin_vel_y') ?? this.values.get('_legacy:vel_y') ?? 0.0;
-    const angVelZ = this.values.get('velocity:ang_vel_z') ?? this.values.get('_legacy:yaw_rate') ?? 0.0;
-    return new Float32Array([linVelX, linVelY, angVelZ]);
+    if (this.terms.has('twist')) {
+      return this.getCommand('twist');
+    }
+    return new Float32Array([0.5, 0.0, 0.0]);
   }
 
-  /**
-   * Set the value of a slider command
-   */
   setValue(id: string, value: number): void {
     const command = this.commands.get(id);
     if (!command || command.config.type !== 'slider') {
       return;
     }
-
-    const config = command.config as SliderCommandConfig;
-    const clampedValue = Math.max(config.min, Math.min(config.max, value));
-    this.values.set(id, clampedValue);
-
+    const term = this.terms.get(command.groupName);
+    const inputName = command.config.name;
+    const clamped = term?.setValue ? term.setValue(inputName, value) : undefined;
+    const nextValue = typeof clamped === 'number' ? clamped : value;
+    this.values.set(id, nextValue);
     this.emit({
       type: 'change',
       commandId: id,
       groupName: command.groupName,
-      value: clampedValue,
+      value: nextValue,
     });
   }
 
-  /**
-   * Trigger a button command
-   */
   triggerButton(id: string): void {
     const command = this.commands.get(id);
     if (!command || command.config.type !== 'button') {
@@ -284,6 +197,9 @@ export class CommandManager {
 
     if (id === '_system:reset' && this.resetCallback) {
       this.resetCallback();
+    } else {
+      const term = this.terms.get(command.groupName);
+      term?.triggerButton?.(command.config.name);
     }
 
     this.emit({
@@ -293,47 +209,110 @@ export class CommandManager {
     });
   }
 
-  /**
-   * Reset all slider values to their defaults
-   */
   resetToDefaults(): void {
-    for (const [id, command] of this.commands) {
-      if (command.config.type === 'slider') {
-        const config = command.config as SliderCommandConfig;
-        this.values.set(id, config.default);
-      }
-    }
-
-    this.emit({
-      type: 'reset',
-      commandId: '*',
-    });
+    this.resetTerms();
   }
 
-  /**
-   * Set the reset callback (called when reset button is pressed)
-   */
   setResetCallback(callback: () => void): void {
     this.resetCallback = callback;
   }
 
-  /**
-   * Add an event listener
-   */
   addEventListener(listener: CommandEventListener): void {
     this.listeners.add(listener);
   }
 
-  /**
-   * Remove an event listener
-   */
   removeEventListener(listener: CommandEventListener): void {
     this.listeners.delete(listener);
   }
 
-  /**
-   * Emit an event to all listeners
-   */
+  clear(): void {
+    for (const term of this.terms.values()) {
+      term.dispose?.();
+    }
+    this.terms.clear();
+    this.commands.clear();
+    this.commandGroups.clear();
+    this.values.clear();
+    this.registerSystemReset();
+    this.emit({ type: 'clear', commandId: '' });
+  }
+
+  hasCommands(): boolean {
+    return this.commands.size > 1;
+  }
+
+  dispose(): void {
+    for (const term of this.terms.values()) {
+      term.dispose?.();
+    }
+    this.terms.clear();
+    this.commands.clear();
+    this.commandGroups.clear();
+    this.values.clear();
+    this.listeners.clear();
+    this.resetCallback = null;
+  }
+
+  private registerSystemReset(): void {
+    this.commands.set('_system:reset', {
+      id: '_system:reset',
+      groupName: '_system',
+      config: {
+        type: 'button',
+        name: 'reset',
+        label: 'Reset Simulation',
+      } satisfies ButtonCommandConfig,
+    });
+    this.commandGroups.set('_system', ['_system:reset']);
+  }
+
+  private registerUi(groupName: string, term: CommandTerm): void {
+    const ui = term.getUiConfig?.();
+    const inputs = Array.isArray(ui?.inputs) ? ui.inputs : [];
+    if (inputs.length === 0) {
+      return;
+    }
+    this.commandGroups.set(groupName, []);
+    for (const input of inputs) {
+      const id = `${groupName}:${input.name}`;
+      this.commands.set(id, { id, groupName, config: input });
+      this.commandGroups.get(groupName)!.push(id);
+      if (input.type === 'slider') {
+        const current = term.getCommand();
+        const sliderIndex = inputs
+          .filter((entry): entry is SliderCommandConfig => entry.type === 'slider')
+          .findIndex(entry => entry.name === input.name);
+        this.values.set(id, current[sliderIndex] ?? input.default);
+      }
+    }
+    this.emit({
+      type: 'group_registered',
+      commandId: groupName,
+      groupName,
+    });
+  }
+
+  private syncValuesFromTerms(): void {
+    for (const [id, command] of this.commands) {
+      if (command.config.type !== 'slider') {
+        continue;
+      }
+      const term = this.terms.get(command.groupName);
+      if (!term) {
+        continue;
+      }
+      const inputs = term.getUiConfig?.()?.inputs ?? [];
+      const sliderInputs = inputs.filter(
+        (entry): entry is SliderCommandConfig => entry.type === 'slider'
+      );
+      const index = sliderInputs.findIndex(entry => entry.name === command.config.name);
+      if (index >= 0) {
+        const current = term.getCommand();
+        this.values.set(id, current[index] ?? this.values.get(id) ?? 0.0);
+      }
+    }
+  }
+
   private emit(event: CommandEvent): void {
     for (const listener of this.listeners) {
       try {
@@ -343,43 +322,8 @@ export class CommandManager {
       }
     }
   }
-
-  /**
-   * Clear all commands (except reset)
-   */
-  clear(): void {
-    const resetCommand = this.commands.get('_system:reset');
-    this.commands.clear();
-    this.commandGroups.clear();
-    this.values.clear();
-    if (resetCommand) {
-      this.commands.set('_system:reset', resetCommand);
-      this.commandGroups.set('_system', ['_system:reset']);
-    }
-    // Notify listeners that commands have been cleared
-    this.emit({ type: 'clear', commandId: '' });
-  }
-
-  /**
-   * Check if any commands (besides reset) are registered
-   */
-  hasCommands(): boolean {
-    return this.commands.size > 1; // More than just reset
-  }
-
-  /**
-   * Dispose of the command manager
-   */
-  dispose(): void {
-    this.commands.clear();
-    this.commandGroups.clear();
-    this.values.clear();
-    this.listeners.clear();
-    this.resetCallback = null;
-  }
 }
 
-// Singleton instance for global access
 let globalCommandManager: CommandManager | null = null;
 
 export function getCommandManager(): CommandManager {

@@ -33,7 +33,7 @@ import { PolicyStateBuilder } from '../policy/PolicyStateBuilder';
 import type { PolicyConfig } from '../policy/types';
 import { TrackingPolicy } from '../policy/modules/TrackingPolicy';
 import { LocomotionPolicy } from '../policy/modules/LocomotionPolicy';
-import { getCommandManager, type CommandsConfig } from '../command';
+import { getCommandManager, type CommandTermContext, type CommandsConfig } from '../command';
 
 type RuntimeOptions = {
   baseUrl?: string;
@@ -316,9 +316,12 @@ export class mjswanRuntime {
   /**
    * Initialize commands from policy config
    */
-  private initializeCommandsFromConfig(commands: CommandsConfig): void {
+  private initializeCommandsFromConfig(
+    commands: CommandsConfig,
+    context: CommandTermContext
+  ): void {
     const commandManager = getCommandManager();
-    commandManager.registerCommandsFromConfig(commands);
+    commandManager.initialize(commands, context);
     console.log('[mjswanRuntime] Commands loaded from policy config:', Object.keys(commands));
   }
 
@@ -467,8 +470,11 @@ export class mjswanRuntime {
   private async mainLoop(): Promise<void> {
     while (this.running) {
       const loopStart = performance.now();
+      const target = this.timestep * this.decimation;
 
       if (this.mjModel && this.mjData) {
+        getCommandManager().update(target);
+        this.mujoco.mj_forward(this.mjModel, this.mjData);
         if (this.policyRunner && this.policyStateBuilder) {
           const state = this.policyStateBuilder.build();
           const obs = this.policyRunner.collectObservationsByKey(state);
@@ -509,7 +515,6 @@ export class mjswanRuntime {
       }
 
       const elapsed = (performance.now() - loopStart) / 1000;
-      const target = this.timestep * this.decimation;
       const sleepTime = Math.max(0, target - elapsed);
       if (sleepTime > 0) {
         await new Promise((resolve) => setTimeout(resolve, sleepTime * 1000));
@@ -553,7 +558,15 @@ export class mjswanRuntime {
 
       // Initialize commands from policy config if present
       if (config.commands && typeof config.commands === 'object') {
-        this.initializeCommandsFromConfig(config.commands as CommandsConfig);
+        this.initializeCommandsFromConfig(config.commands as CommandsConfig, {
+          mujoco: this.mujoco,
+          mjModel: this.mjModel,
+          mjData: this.mjData,
+          scene: this.scene,
+        });
+        getCommandManager().resetTerms();
+        this.mujoco.mj_forward(this.mjModel, this.mjData);
+        this.updateCachedState();
       }
 
       if (!config.policy_joint_names || config.policy_joint_names.length === 0) {
@@ -846,6 +859,7 @@ export class mjswanRuntime {
       return;
     }
     this.mujoco.mj_resetData(this.mjModel, this.mjData);
+    getCommandManager().resetTerms();
     this.mujoco.mj_forward(this.mjModel, this.mjData);
     this.lastSimState.bodies.clear();
     this.updateCachedState();
@@ -1064,6 +1078,8 @@ export class mjswanRuntime {
   }
 
   private render = (): void => {
+    getCommandManager().updateDebugVisuals();
+
     if (this.mjData) {
       updateCameraFromData(this.mjData, this.camera, this.controls, this.cameraState);
     }
