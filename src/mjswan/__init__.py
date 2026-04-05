@@ -21,6 +21,7 @@ from .envs.mdp.actions import (
     JointEffortActionCfg,
     JointPositionActionCfg,
 )
+from .envs.mdp.observations import ObsFunc, register_obs_func
 from .managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from .managers.termination_manager import TerminationTermCfg
 from .policy import PolicyConfig, PolicyHandle
@@ -44,6 +45,9 @@ __all__ = [
     "ViewerConfig",
     "SplatConfig",
     "PolicyConfig",
+    # Custom observation registry
+    "ObsFunc",
+    "register_obs_func",
     # MDP config (mjlab-compatible)
     "ObservationGroupCfg",
     "ObservationTermCfg",

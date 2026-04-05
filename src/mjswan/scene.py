@@ -6,11 +6,13 @@ managing MuJoCo scenes and their associated policies.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import mujoco
+import numpy as np
 import onnx
 
 from .adapters import (
@@ -28,6 +30,115 @@ if TYPE_CHECKING:
     from .managers.observation_manager import ObservationGroupCfg
     from .managers.termination_manager import TerminationTermCfg
     from .project import ProjectHandle
+
+
+def _get_scene_model(scene_config: SceneConfig) -> mujoco.MjModel | None:
+    if scene_config.model is not None:
+        return scene_config.model
+    if scene_config.spec is None:
+        return None
+    try:
+        return scene_config.spec.compile()
+    except Exception:
+        return None
+
+
+def _get_default_qpos(model: mujoco.MjModel) -> list[float]:
+    if model.nkey > 0:
+        try:
+            key_qpos = np.asarray(model.key_qpos).reshape(model.nkey, model.nq)
+            return [float(v) for v in key_qpos[0]]
+        except Exception:
+            pass
+    return [float(v) for v in np.asarray(model.qpos0).reshape(model.nq)]
+
+
+def _resolve_observation_joints(
+    model: mujoco.MjModel,
+    config: dict[str, Any],
+) -> tuple[list[str], list[float]] | None:
+    joint_names_cfg = config.get("joint_names")
+    entity_name = config.get("entity_name")
+    if joint_names_cfg is None and entity_name is None:
+        return None
+
+    default_qpos = _get_default_qpos(model)
+    prefix = f"{entity_name}/" if entity_name else ""
+    joints: list[tuple[str, int]] = []
+    for i in range(model.njnt):
+        if model.jnt_type[i] == mujoco.mjtJoint.mjJNT_FREE:
+            continue
+        name = model.joint(i).name
+        if prefix and not name.startswith(prefix):
+            continue
+        joints.append((name, int(model.jnt_qposadr[i])))
+
+    if not joints:
+        return None
+
+    if joint_names_cfg in (None, "all"):
+        selected = joints
+    else:
+        patterns = (
+            list(joint_names_cfg)
+            if isinstance(joint_names_cfg, (list, tuple))
+            else [joint_names_cfg]
+        )
+        regexes = []
+        for pattern in patterns:
+            try:
+                regexes.append(re.compile(f"^(?:{pattern})$"))
+            except re.error:
+                continue
+        if not regexes:
+            return None
+
+        def _matches(name: str) -> bool:
+            bare = name[len(prefix) :] if prefix and name.startswith(prefix) else name
+            return any(rex.fullmatch(bare) or rex.fullmatch(name) for rex in regexes)
+
+        selected = [(name, adr) for name, adr in joints if _matches(name)]
+
+    if not selected:
+        return None
+
+    names = [name for name, _ in selected]
+    defaults = [
+        default_qpos[adr] if adr < len(default_qpos) else 0.0 for _, adr in selected
+    ]
+    return names, defaults
+
+
+def _enrich_joint_observations(
+    scene_config: SceneConfig,
+    observations: dict[str, Any] | None,
+) -> None:
+    if observations is None:
+        return
+    model = _get_scene_model(scene_config)
+    if model is None:
+        return
+
+    for group in observations.values():
+        terms = getattr(group, "terms", None)
+        if not isinstance(terms, dict):
+            continue
+        for term in terms.values():
+            ts_name = getattr(getattr(term, "func", None), "ts_name", None)
+            if ts_name not in {"JointPos", "JointPositions", "JointVelocities"}:
+                continue
+            params = dict(getattr(term, "params", {}) or {})
+            merged = {**getattr(term.func, "defaults", {}), **params}
+            if merged.get("joint_name") is not None:
+                continue
+            resolved = _resolve_observation_joints(model, merged)
+            if resolved is None:
+                continue
+            joint_names, default_joint_pos = resolved
+            params["joint_names"] = joint_names
+            if ts_name in {"JointPos", "JointPositions"}:
+                params["default_joint_pos"] = default_joint_pos
+            term.params = params
 
 
 @dataclass
@@ -146,6 +257,7 @@ class SceneHandle:
         adapted_observations = adapt_observations(observations)
         adapted_actions = adapt_actions(actions)
         adapted_terminations = adapt_terminations(terminations)
+        _enrich_joint_observations(self._config, adapted_observations)
         if adapted_actions and policy_joint_names:
             resolve_action_scales(adapted_actions, policy_joint_names)
 

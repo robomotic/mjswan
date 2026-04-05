@@ -15,12 +15,15 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import mujoco
 import pytest
 
 import mjswan
 from mjswan.builder import Builder
+from mjswan.envs.mdp import observations as obs_fns
 from mjswan.envs.mdp import terminations as term_fns
 from mjswan.envs.mdp.actions import JointEffortActionCfg, JointPositionActionCfg
+from mjswan.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from mjswan.managers.termination_manager import TerminationTermCfg
 from mjswan.utils import name2id
 
@@ -340,6 +343,49 @@ class TestSaveWebPolicyJson:
         )
         data = self._policy_json(self._run(builder, tmp_path), "Policy")
         assert data["onnx"]["path"] == "policy.onnx"
+
+    def test_joint_observation_terms_are_enriched_from_scene_spec(
+        self, tmp_path, minimal_onnx
+    ):
+        xml_path = tmp_path / "scene.xml"
+        xml_path.write_text(
+            '<mujoco model="jointed">'
+            "<worldbody>"
+            '<body name="robot/base">'
+            '<geom type="sphere" size="0.05" mass="1"/>'
+            '<body name="robot/link1">'
+            '<joint name="robot/joint1" type="hinge"/>'
+            '<geom type="capsule" fromto="0 0 0 0 0 0.2" size="0.02" mass="1"/>'
+            '<body name="robot/link2">'
+            '<joint name="robot/joint2" type="slide"/>'
+            '<geom type="capsule" fromto="0 0 0 0 0 0.2" size="0.02" mass="1"/>'
+            "</body>"
+            "</body>"
+            "</body>"
+            "</worldbody>"
+            '<keyframe><key name="init" qpos="0.25 -0.5"/></keyframe>'
+            "</mujoco>"
+        )
+        spec = mujoco.MjSpec.from_file(str(xml_path))
+
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", spec=spec)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            observations={
+                "policy": ObservationGroupCfg(
+                    terms={
+                        "joint_pos": ObservationTermCfg(func=obs_fns.joint_pos_rel),
+                    }
+                ),
+            },
+        )
+
+        data = self._policy_json(self._run(builder, tmp_path), "Policy")
+        joint_pos = data["observations"]["policy"][0]
+        assert joint_pos["joint_names"] == ["robot/joint1", "robot/joint2"]
+        assert joint_pos["default_joint_pos"] == [0.25, -0.5]
 
     # -----------------------------------------------------------------------
     # config_path branch

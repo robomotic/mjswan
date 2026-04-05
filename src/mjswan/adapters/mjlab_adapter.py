@@ -36,7 +36,7 @@ from ..envs.mdp import terminations as _term_module
 from ..envs.mdp.actions.actions import (
     ActionTermCfg as MjswanActionTermCfg,
 )
-from ..envs.mdp.observations import ObsFunc
+from ..envs.mdp.observations import ObsFunc, _custom_registry
 from ..envs.mdp.terminations import TermFunc
 from ..managers.observation_manager import (
     ObservationGroupCfg as MjswanObservationGroupCfg,
@@ -87,10 +87,16 @@ def _adapt_obs_func(func: Any, term_name: str | None = None) -> ObsFunc:
             return fallback
     if isinstance(sentinel, ObsFunc):
         return sentinel
+    # Fall back to user-registered custom sentinels
+    if name and name in _custom_registry:
+        return _custom_registry[name]
+    if term_name and term_name in _custom_registry:
+        return _custom_registry[term_name]
     raise ValueError(
         f"No mjswan mapping for mjlab observation function '{name}'. "
         f"Ensure a matching ObsFunc sentinel exists in "
-        f"mjswan.envs.mdp.observations."
+        f"mjswan.envs.mdp.observations, or register one with "
+        f"mjswan.envs.mdp.observations.register_obs_func()."
     )
 
 
@@ -98,25 +104,36 @@ def _sanitize_obs_params(params: dict[str, Any]) -> dict[str, Any]:
     """Strip mjlab-specific params that are not JSON-serializable.
 
     ``asset_cfg`` (a ``SceneEntityCfg``) is removed.  When it carries
-    ``joint_names``, the first name is promoted to ``joint_name`` so that
-    observation classes such as ``JointPosCosSin`` can resolve the correct
-    MuJoCo joint at runtime.
+    entity-scoping information, it is promoted into JSON-friendly fields so
+    browser-side observation classes can resolve the correct MuJoCo entities
+    at runtime.
     """
     if "asset_cfg" not in params:
         return params
     result = {k: v for k, v in params.items() if k != "asset_cfg"}
     asset_cfg = params["asset_cfg"]
     if _is_from_mjlab(asset_cfg):
+        entity_name = getattr(asset_cfg, "name", None)
+        if entity_name:
+            result["entity_name"] = entity_name
         joint_names = getattr(asset_cfg, "joint_names", None)
         if joint_names:
-            entity_name = getattr(asset_cfg, "name", None)
-            name = (
-                joint_names[0]
+            names = (
+                list(joint_names)
                 if isinstance(joint_names, (list, tuple))
-                else joint_names
+                else [joint_names]
             )
-            # mjlab namespaces entity joints as "{entity_name}/{joint_name}"
-            result["joint_name"] = f"{entity_name}/{name}" if entity_name else name
+            result["joint_names"] = names
+            if len(names) == 1:
+                name = names[0]
+                result["joint_name"] = f"{entity_name}/{name}" if entity_name else name
+        site_names = getattr(asset_cfg, "site_names", None)
+        if site_names:
+            name = (
+                site_names[0] if isinstance(site_names, (list, tuple)) else site_names
+            )
+            # mjlab namespaces entity sites as "{entity_name}/{site_name}"
+            result["site_name"] = f"{entity_name}/{name}" if entity_name else name
     return result
 
 

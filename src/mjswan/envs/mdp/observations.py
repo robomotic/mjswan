@@ -31,11 +31,62 @@ class ObsFunc:
         unsupported_reason: If set, this sentinel is accepted for API
             compatibility but raises ``NotImplementedError`` at build time
             with this message.
+        ts_src: Absolute path to a ``.ts`` file that exports the class
+            named ``ts_name``.  When set, the file is injected into the
+            browser bundle at build time so the custom observation class is
+            available to the ``PolicyRunner``.  Leave ``None`` for built-in
+            classes already present in ``observations.ts``.
     """
 
     ts_name: str
     defaults: dict = field(default_factory=dict)
     unsupported_reason: str | None = None
+    ts_src: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Custom observation registry
+# ---------------------------------------------------------------------------
+
+_custom_registry: dict[str, ObsFunc] = {}
+"""Maps mjlab observation function names to user-supplied ``ObsFunc`` sentinels.
+
+Populated via :func:`register_obs_func`.  The mjlab adapter checks this
+registry as a fallback after the built-in sentinel lookup fails.
+"""
+
+
+def register_obs_func(mjlab_name: str, sentinel: ObsFunc) -> None:
+    """Register a custom ``ObsFunc`` sentinel for an mjlab observation function.
+
+    Call this before :meth:`~mjswan.Builder.build` so the adapter can
+    resolve the function and the builder can inject any custom TypeScript
+    source into the browser bundle.
+
+    Args:
+        mjlab_name: The mjlab observation function name
+            (e.g. ``"ee_to_object_distance"``).
+        sentinel: An :class:`ObsFunc` describing the browser-side
+            implementation.  Set ``unsupported_reason`` to mark the
+            observation as unsupported (silently skipped at build time).
+            Set ``ts_src`` to the absolute path of a ``.ts`` file that
+            exports the class named by ``ts_name``.
+
+    Example — mark as unsupported::
+
+        register_obs_func(
+            "ee_to_object_distance",
+            ObsFunc(ts_name="", unsupported_reason="not available in browser"),
+        )
+
+    Example — provide a custom TypeScript implementation::
+
+        register_obs_func(
+            "my_custom_obs",
+            ObsFunc(ts_name="MyCustomObs", ts_src="/path/to/MyCustomObs.ts"),
+        )
+    """
+    _custom_registry[mjlab_name] = sentinel
 
 
 # ---------------------------------------------------------------------------
@@ -64,13 +115,27 @@ mjlab: ``asset.data.projected_gravity_b``
 # Joint state
 # ---------------------------------------------------------------------------
 
-joint_pos_rel = ObsFunc("JointPos", {"subtract_default": True, "history_steps": 1})
+joint_pos_rel = ObsFunc(
+    "JointPos",
+    {
+        "subtract_default": True,
+        "history_steps": 1,
+        "entity_name": "robot",
+        "joint_names": "all",
+    },
+)
 """Joint positions relative to the default pose.
 
 mjlab: ``asset.data.joint_pos - asset.data.default_joint_pos``
 """
 
-joint_vel_rel = ObsFunc("JointVelocities")
+joint_vel_rel = ObsFunc(
+    "JointVelocities",
+    {
+        "entity_name": "robot",
+        "joint_names": "all",
+    },
+)
 """Joint velocities relative to the default velocities.
 
 mjlab: ``asset.data.joint_vel - asset.data.default_joint_vel``
@@ -181,6 +246,8 @@ height_scan = ObsFunc(
 
 __all__ = [
     "ObsFunc",
+    "register_obs_func",
+    "_custom_registry",
     "base_lin_vel",
     "base_ang_vel",
     "projected_gravity",

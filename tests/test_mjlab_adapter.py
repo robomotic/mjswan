@@ -28,7 +28,7 @@ from mjswan.managers.termination_manager import TerminationTermCfg
 # ---------------------------------------------------------------------------
 
 
-def _make_mjlab_class(name: str, **defaults: Any) -> type:
+def _make_mjlab_class(class_name: str, **defaults: Any) -> type:
     """Create a simple dataclass-like class that appears to come from mjlab."""
 
     class Cls:
@@ -36,8 +36,8 @@ def _make_mjlab_class(name: str, **defaults: Any) -> type:
             for k, v in {**defaults, **kwargs}.items():
                 setattr(self, k, v)
 
-    Cls.__name__ = name
-    Cls.__qualname__ = name
+    Cls.__name__ = class_name
+    Cls.__qualname__ = class_name
     Cls.__module__ = "mjlab.fake"
     return Cls
 
@@ -110,6 +110,15 @@ FakeMjlabJointEffortActionCfg = _make_mjlab_class(
     damping=None,
 )
 
+FakeMjlabSceneEntityCfg = _make_mjlab_class(
+    "SceneEntityCfg",
+    **{
+        "name": "robot",
+        "joint_names": None,
+        "site_names": None,
+    },
+)
+
 
 # ===================================================================
 # Tests: Observations
@@ -155,6 +164,22 @@ class TestAdaptObservations:
         term = result["policy"].terms["jp"]
         assert term.scale == 0.5
         assert term.history_length == 3
+
+    def test_mjlab_asset_cfg_joint_scope_preserved(self):
+        mjlab_func = _make_mjlab_obs_func("joint_pos_rel")
+        asset_cfg = FakeMjlabSceneEntityCfg(
+            name="robot", joint_names=("joint1", "joint2")
+        )
+        mjlab_term = FakeMjlabObsTermCfg(
+            func=mjlab_func, params={"asset_cfg": asset_cfg}
+        )
+        mjlab_group = FakeMjlabObsGroupCfg(terms={"jp": mjlab_term})
+
+        result = adapt_observations({"policy": mjlab_group})
+        assert result is not None
+        term = result["policy"].terms["jp"]
+        assert term.params["entity_name"] == "robot"
+        assert term.params["joint_names"] == ["joint1", "joint2"]
 
     def test_unknown_mjlab_obs_func_raises(self):
         mjlab_func = _make_mjlab_obs_func("nonexistent_function")

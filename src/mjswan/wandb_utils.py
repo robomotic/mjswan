@@ -69,8 +69,8 @@ def fetch_pt_onnx_from_wandb_run(
     Returns:
         List of ``(policy_name, onnx_model, joint_names, default_joint_pos)``
         tuples sorted by training step, where joint_names is the ordered list
-        of joints controlled by the policy and default_joint_pos is the default
-        pose (action=0 target) in the same order.
+        of ACTUATED joints controlled by the policy and default_joint_pos is
+        the action=0 target pose in the same order.
 
     Raises:
         ImportError: If ``mjlab`` or ``torch`` are not installed.
@@ -119,8 +119,10 @@ def fetch_pt_onnx_from_wandb_run(
             runner_cls = load_runner_cls(task_id) or MjlabOnPolicyRunner
             runner = runner_cls(env, asdict(agent_cfg), device="cpu")
 
-            # Collect joint names from first action term, prefixed with entity name
-            # (e.g. "robot/FR_hip_joint") to match the MuJoCo model namespace.
+            # Collect the ACTUATED joints controlled by the policy. Observation
+            # terms may use a broader joint set (for example passive joints
+            # coupled via equality constraints), but control and ONNX output
+            # dimensions must remain aligned with the action manager.
             joint_names: list[str] = []
             default_joint_pos: list[float] = []
             inner_env = env.env if hasattr(env, "env") else env
@@ -134,7 +136,7 @@ def fetch_pt_onnx_from_wandb_run(
                         )
                         prefix = f"{entity_name}/" if entity_name else ""
                         joint_names = [f"{prefix}{n}" for n in term.target_names]
-                        # Default joint positions (the pose action=0 commands)
+                        # Default joint positions (the pose action=0 commands).
                         if hasattr(term, "offset") and term.offset is not None:
                             offset = term.offset
                             if hasattr(offset, "tolist"):

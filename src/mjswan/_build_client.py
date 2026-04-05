@@ -149,6 +149,83 @@ class ClientBuilder:
             env=build_env,
         )
 
+    def generate_custom_observations(self) -> None:
+        """Generate custom_observations.ts from user-registered ObsFunc sentinels.
+
+        Iterates ``_custom_registry`` and collects entries that have a ``ts_src``
+        path.  Each source file is read and its content is inlined into
+        ``custom_observations.ts``, which is then re-exported via the
+        ``CustomObservations`` map so the browser-side ``PolicyRunner`` can
+        resolve the class by name.
+
+        Entries without ``ts_src`` (unsupported sentinels) are ignored — they
+        need no JavaScript representation.
+        """
+        from mjswan.envs.mdp.observations import _custom_registry
+
+        output_path = (
+            self.project_dir / "src" / "core" / "observation" / "custom_observations.ts"
+        )
+
+        custom_entries = {
+            name: sentinel
+            for name, sentinel in _custom_registry.items()
+            if sentinel.ts_src is not None and sentinel.ts_name
+        }
+
+        if not custom_entries:
+            output_path.write_text(
+                "// Custom observation classes registered via"
+                " mjswan.envs.mdp.observations.register_obs_func().\n"
+                "// This file is auto-generated at build time — do not edit manually.\n"
+                "\n"
+                "export const CustomObservations:"
+                " Record<string, new (...args: never[]) => unknown> = {};\n"
+            )
+            return
+
+        lines = [
+            "// Custom observation classes registered via"
+            " mjswan.envs.mdp.observations.register_obs_func().",
+            "// This file is auto-generated at build time — do not edit manually.",
+            "",
+        ]
+
+        # Collect imports (deduplicated) and class bodies separately
+        seen_imports: list[str] = []
+        class_bodies: list[str] = []
+        class_names: list[str] = []
+        for sentinel in custom_entries.values():
+            src_path = Path(sentinel.ts_src).expanduser().resolve()  # type: ignore[arg-type]
+            if not src_path.exists():
+                raise FileNotFoundError(
+                    f"Custom observation ts_src not found: {src_path}"
+                )
+            src_lines = src_path.read_text().splitlines()
+            body_lines = []
+            for src_line in src_lines:
+                if src_line.startswith("import "):
+                    if src_line not in seen_imports:
+                        seen_imports.append(src_line)
+                else:
+                    body_lines.append(src_line)
+            class_bodies.append("\n".join(body_lines).strip())
+            class_names.append(sentinel.ts_name)
+
+        # Emit deduplicated imports, then class bodies, then the registry map
+        lines.extend(seen_imports)
+        lines.append("")
+        for body in class_bodies:
+            lines.append(body)
+            lines.append("")
+        lines.append("export const CustomObservations = {")
+        for cls in class_names:
+            lines.append(f"  {cls},")
+        lines.append("};")
+        lines.append("")
+
+        output_path.write_text("\n".join(lines))
+
     def generate_viewer_config_defaults(self) -> None:
         """Generate viewer_config_defaults.ts from Python ViewerConfig defaults."""
         from mjswan.viewer_config import ViewerConfig
@@ -185,6 +262,7 @@ class ClientBuilder:
         try:
             self.create_env(clean=clean)
             self.sync_version_from_python()
+            self.generate_custom_observations()
             self.generate_viewer_config_defaults()
             self.install_dependencies(clean=clean)
             env: dict[str, str] = {"MJSWAN_BASE_PATH": base_path}

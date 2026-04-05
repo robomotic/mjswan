@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { MjModel } from '@mujoco/mujoco';
 import { ObservationBase } from './ObservationBase';
 import type { ObservationConfig } from './ObservationBase';
+import { CustomObservations } from './custom_observations';
 import {
   clampFutureIndices,
   normalizeQuat,
@@ -41,6 +42,17 @@ function normalizeScale(scale: unknown, size: number, fallback = 1.0): Float32Ar
     return values;
   }
   return null;
+}
+
+function normalizeVector(values: unknown, size: number, fallback = 0.0): Float32Array | null {
+  if (!Array.isArray(values)) {
+    return null;
+  }
+  const output = new Float32Array(size);
+  for (let i = 0; i < size; i++) {
+    output[i] = typeof values[i] === 'number' ? values[i] : fallback;
+  }
+  return output;
 }
 
 export class BootIndicator extends ObservationBase {
@@ -124,6 +136,7 @@ export class JointPos extends ObservationBase {
   private subtractDefault: boolean;
   private defaultJointPos: Float32Array;
   private scale: Float32Array | null;
+  private qposAdr: number[] | null;
 
   constructor(runner: PolicyRunner, config: ObservationConfig) {
     super(runner, config);
@@ -137,11 +150,17 @@ export class JointPos extends ObservationBase {
       posSteps = [0, 1, 2, 3, 4, 8];
     }
     this.posSteps = posSteps;
-    this.numJoints = runner.getNumActions();
+    const jointNames = this.getJointNames(config);
+    this.qposAdr = jointNames ? this.resolveQposAdr(jointNames) : null;
+    this.numJoints = jointNames?.length ?? (
+      typeof config.num_joints === 'number'
+        ? Math.max(1, Math.floor(config.num_joints))
+        : runner.getNumActions()
+    );
     this.maxStep = Math.max(...this.posSteps);
     this.history = Array.from({ length: this.maxStep + 1 }, () => new Float32Array(this.numJoints));
     this.subtractDefault = Boolean(config.subtract_default);
-    this.defaultJointPos = runner.getDefaultJointPos();
+    this.defaultJointPos = this.normalizeDefaultJointPos(config.default_joint_pos);
     this.scale = this.normalizeScale(config.scale);
   }
 
@@ -150,8 +169,7 @@ export class JointPos extends ObservationBase {
   }
 
   reset(state?: PolicyState): void {
-    const source = state?.jointPos ?? new Float32Array(this.numJoints);
-    this.history[0].set(source);
+    this.history[0].set(this.computeCurrent(state));
     for (let i = 1; i < this.history.length; i++) {
       this.history[i].set(this.history[0]);
     }
@@ -161,7 +179,7 @@ export class JointPos extends ObservationBase {
     for (let i = this.history.length - 1; i > 0; i--) {
       this.history[i].set(this.history[i - 1]);
     }
-    this.history[0].set(state.jointPos);
+    this.history[0].set(this.computeCurrent(state));
   }
 
   compute(): Float32Array {
@@ -183,6 +201,70 @@ export class JointPos extends ObservationBase {
       offset += this.numJoints;
     }
     return out;
+  }
+
+  private computeCurrent(state?: PolicyState): Float32Array {
+    if (this.qposAdr !== null) {
+      const qpos = this.runner.getContext()?.mjData?.qpos;
+      const out = new Float32Array(this.numJoints);
+      for (let i = 0; i < this.numJoints; i++) {
+        const adr = this.qposAdr[i];
+        out[i] = qpos !== undefined ? qpos[adr] : 0.0;
+      }
+      return out;
+    }
+    return state?.jointPos ?? new Float32Array(this.numJoints);
+  }
+
+  private getJointNames(config: ObservationConfig): string[] | null {
+    if (!Array.isArray(config.joint_names)) {
+      return null;
+    }
+    const names = config.joint_names.filter((value): value is string => typeof value === 'string');
+    return names.length > 0 ? names : null;
+  }
+
+  private normalizeDefaultJointPos(values: unknown): Float32Array {
+    const explicit = normalizeVector(values, this.numJoints, 0.0);
+    if (explicit) {
+      return explicit;
+    }
+    const defaults = this.runner.getDefaultJointPos();
+    const output = new Float32Array(this.numJoints);
+    for (let i = 0; i < this.numJoints; i++) {
+      output[i] = defaults[i] ?? 0.0;
+    }
+    return output;
+  }
+
+  private resolveQposAdr(jointNames: string[]): number[] {
+    const mjModel = this.runner.getContext()?.mjModel ?? null;
+    if (mjModel === null) {
+      return Array.from({ length: jointNames.length }, () => 0);
+    }
+    const names = this.getModelJointNames(mjModel);
+    return jointNames.map((jointName) => {
+      const idx = names.indexOf(jointName);
+      if (idx < 0) {
+        throw new Error(`JointPos: joint "${jointName}" not found in model`);
+      }
+      return mjModel.jnt_qposadr[idx];
+    });
+  }
+
+  private getModelJointNames(mjModel: MjModel): string[] {
+    const namesArray = new Uint8Array(mjModel.names);
+    const decoder = new TextDecoder();
+    const names: string[] = [];
+    for (let j = 0; j < mjModel.njnt; j++) {
+      let start = mjModel.name_jntadr[j];
+      let end = start;
+      while (end < namesArray.length && namesArray[end] !== 0) {
+        end++;
+      }
+      names.push(decoder.decode(namesArray.subarray(start, end)));
+    }
+    return names;
   }
 
   private normalizeScale(scale: unknown): Float32Array | null {
@@ -525,16 +607,26 @@ export class JointVelocities extends ObservationBase {
   private history: Float32Array[];
   private scale: Float32Array | null;
   private qvelAdr: number | null;
+  private qvelAdrList: number[] | null;
 
   constructor(runner: PolicyRunner, config: ObservationConfig) {
     super(runner, config);
+    const jointNames = Array.isArray(config.joint_names)
+      ? config.joint_names.filter((value): value is string => typeof value === 'string')
+      : null;
     const jointName = config.joint_name as string | undefined;
-    if (jointName !== undefined) {
+    if (jointNames && jointNames.length > 0) {
+      this.qvelAdr = null;
+      this.qvelAdrList = this.resolveQvelAdrList(runner.getContext()?.mjModel ?? null, jointNames);
+      this.numJoints = jointNames.length;
+    } else if (jointName !== undefined) {
       const mjModel = runner.getContext()?.mjModel ?? null;
       this.qvelAdr = mjModel !== null ? this.resolveQvelAdr(mjModel, jointName) : 0;
+      this.qvelAdrList = null;
       this.numJoints = 1;
     } else {
       this.qvelAdr = null;
+      this.qvelAdrList = null;
       this.numJoints = runner.getNumActions();
     }
     this.historySteps = Math.max(1, Math.floor((config.history_steps as number | undefined) ?? 1));
@@ -577,6 +669,19 @@ export class JointVelocities extends ObservationBase {
   }
 
   private computeCurrent(state?: PolicyState): Float32Array {
+    if (this.qvelAdrList !== null) {
+      const qvel = this.runner.getContext()?.mjData?.qvel;
+      const out = new Float32Array(this.numJoints);
+      for (let i = 0; i < this.numJoints; i++) {
+        out[i] = qvel !== undefined ? qvel[this.qvelAdrList[i]] : 0.0;
+      }
+      if (this.scale) {
+        for (let i = 0; i < out.length; i++) {
+          out[i] *= this.scale[i] ?? 1.0;
+        }
+      }
+      return out;
+    }
     if (this.qvelAdr !== null) {
       const qvel = this.runner.getContext()?.mjData?.qvel;
       const vel = qvel !== undefined ? qvel[this.qvelAdr] : 0.0;
@@ -595,17 +700,39 @@ export class JointVelocities extends ObservationBase {
   }
 
   private resolveQvelAdr(mjModel: MjModel, jointName: string): number {
+    const names = this.getModelJointNames(mjModel);
+    const idx = names.indexOf(jointName);
+    if (idx < 0) {
+      throw new Error(`JointVelocities: joint "${jointName}" not found in model`);
+    }
+    return mjModel.jnt_dofadr[idx];
+  }
+
+  private resolveQvelAdrList(mjModel: MjModel | null, jointNames: string[]): number[] {
+    if (mjModel === null) {
+      return Array.from({ length: jointNames.length }, () => 0);
+    }
+    const names = this.getModelJointNames(mjModel);
+    return jointNames.map((jointName) => {
+      const idx = names.indexOf(jointName);
+      if (idx < 0) {
+        throw new Error(`JointVelocities: joint "${jointName}" not found in model`);
+      }
+      return mjModel.jnt_dofadr[idx];
+    });
+  }
+
+  private getModelJointNames(mjModel: MjModel): string[] {
     const namesArray = new Uint8Array(mjModel.names);
     const decoder = new TextDecoder();
+    const names: string[] = [];
     for (let j = 0; j < mjModel.njnt; j++) {
       let start = mjModel.name_jntadr[j];
       let end = start;
       while (end < namesArray.length && namesArray[end] !== 0) end++;
-      if (decoder.decode(namesArray.subarray(start, end)) === jointName) {
-        return mjModel.jnt_dofadr[j];
-      }
+      names.push(decoder.decode(namesArray.subarray(start, end)));
     }
-    throw new Error(`JointVelocities: joint "${jointName}" not found in model`);
+    return names;
   }
 }
 
@@ -761,6 +888,7 @@ export class JointPositions extends JointPos { }
 export class PreviousActions extends PrevActions { }
 
 export const Observations = {
+  ...CustomObservations,
   PrevActions,
   PreviousActions,
   BootIndicator,
