@@ -166,7 +166,7 @@ class SceneHandle:
 
     def add_policy_from_wandb(
         self,
-        run_path: str,
+        run_path: str | list[str],
         *,
         only_latest: bool = False,
         task_id: str | None = None,
@@ -176,18 +176,19 @@ class SceneHandle:
         actions: Mapping[str, ActionTermCfg] | Mapping[str, Any] | None = None,
         terminations: dict[str, TerminationTermCfg] | dict[str, Any] | None = None,
     ) -> list[PolicyHandle]:
-        """Add ONNX policies fetched from a W&B run to this scene.
+        """Add ONNX policies fetched from one or more W&B runs to this scene.
 
         ``config_path``, ``observations``, ``actions``, and ``terminations`` are
-        applied identically to every policy fetched from the run.
+        applied identically to every policy fetched from every run.
 
         Args:
-            run_path: W&B run path in the format ``"entity/project/run_id"``.
+            run_path: W&B run path in the format ``"entity/project/run_id"``, or
+                a list of such paths to fetch policies from multiple runs.
             only_latest: If ``False`` (default), fetches all ``model_*.pt``
                 checkpoints and converts each to ONNX via mjlab — requires
                 ``mjlab`` and ``torch`` to be installed and ``task_id`` to be
                 provided.  If ``True``, fetches only the ``.onnx`` file from
-                the run (the latest exported checkpoint).
+                each run (the latest exported checkpoint).
             task_id: mjlab task identifier required when ``only_latest=False``
                 (e.g. ``"go2_flat"``).  Ignored when ``only_latest=True``.
             config_path: Optional path to a policy config JSON file applied to
@@ -201,15 +202,16 @@ class SceneHandle:
                 policies.
 
         Returns:
-            List of :class:`PolicyHandle` instances, one per fetched policy.
+            Flat list of :class:`PolicyHandle` instances across all runs, in the
+            order the runs were provided.
 
         Raises:
             ValueError: If ``only_latest=False`` and ``task_id`` is not provided,
-                or if no matching files are found in the W&B run.
+                or if no matching files are found in a W&B run.
             ImportError: If ``only_latest=False`` and ``mjlab``/``torch`` are not
                 installed.
 
-        Example — all logged checkpoints (default):
+        Example — all logged checkpoints from a single run (default):
             ```python
             scene.add_policy_from_wandb(
                 run_path="my-org/my-project/run-id",
@@ -228,38 +230,56 @@ class SceneHandle:
                 actions={"joint_pos": JointPositionActionCfg(scale=1.0)},
             )
             ```
+
+        Example — multiple runs:
+            ```python
+            scene.add_policy_from_wandb(
+                run_path=[
+                    "my-org/my-project/run-id-1",
+                    "my-org/my-project/run-id-2",
+                ],
+                only_latest=True,
+                config_path="assets/locomotion.json",
+                actions={"joint_pos": JointPositionActionCfg(scale=1.0)},
+            )
+            ```
         """
+        if not only_latest and task_id is None:
+            raise ValueError(
+                "task_id is required when only_latest=False. "
+                "Provide the mjlab task identifier, e.g. task_id='go2_flat'."
+            )
+
+        run_paths = [run_path] if isinstance(run_path, str) else run_path
+
         if only_latest:
             from .wandb_utils import fetch_onnx_from_wandb_run
-
-            entries = fetch_onnx_from_wandb_run(run_path)
         else:
-            if task_id is None:
-                raise ValueError(
-                    "task_id is required when only_latest=False. "
-                    "Provide the mjlab task identifier, e.g. task_id='go2_flat'."
-                )
             from .wandb_utils import fetch_pt_onnx_from_wandb_run
 
-            entries = fetch_pt_onnx_from_wandb_run(run_path, task_id)
-
         handles = []
-        for entry in entries:
-            name, model, *rest = entry
-            joint_names: list[str] | None = rest[0] if len(rest) > 0 else None
-            djp: list[float] | None = rest[1] if len(rest) > 1 else None
-            handle = self.add_policy(
-                name=name,
-                policy=model,
-                config_path=config_path,
-                metadata=metadata,
-                observations=observations,
-                actions=actions,
-                terminations=terminations,
-                policy_joint_names=joint_names,
-                default_joint_pos=djp,
-            )
-            handles.append(handle)
+        for path in run_paths:
+            if only_latest:
+                entries = fetch_onnx_from_wandb_run(path)
+            else:
+                entries = fetch_pt_onnx_from_wandb_run(path, task_id)
+
+            for entry in entries:
+                name, model, *rest = entry
+                joint_names: list[str] | None = rest[0] if len(rest) > 0 else None
+                djp: list[float] | None = rest[1] if len(rest) > 1 else None
+                handle = self.add_policy(
+                    name=name,
+                    policy=model,
+                    config_path=config_path,
+                    metadata=metadata,
+                    observations=observations,
+                    actions=actions,
+                    terminations=terminations,
+                    policy_joint_names=joint_names,
+                    default_joint_pos=djp,
+                )
+                handles.append(handle)
         return handles
 
     def add_splat(
