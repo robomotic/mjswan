@@ -33,13 +33,18 @@ from typing import Any
 from ..command import CommandTermConfig as MjswanCommandTermConfig
 from ..command import _custom_registry as _custom_command_registry
 from ..envs.mdp import actions as _actions_module
+from ..envs.mdp import events as _events_module
 from ..envs.mdp import observations as _obs_module
 from ..envs.mdp import terminations as _term_module
 from ..envs.mdp.actions.actions import (
     ActionTermCfg as MjswanActionTermCfg,
 )
+from ..envs.mdp.events import EventFunc
+from ..envs.mdp.events import _custom_registry as _custom_event_registry
 from ..envs.mdp.observations import ObsFunc, _custom_registry
 from ..envs.mdp.terminations import TermFunc
+from ..envs.mdp.terminations import _custom_registry as _custom_term_registry
+from ..managers.event_manager import EventTermCfg as MjswanEventTermCfg
 from ..managers.observation_manager import (
     ObservationGroupCfg as MjswanObservationGroupCfg,
 )
@@ -80,10 +85,20 @@ def _adapt_obs_func(func: Any, term_name: str | None = None) -> ObsFunc:
         return func
     name = getattr(func, "__name__", None)
     sentinel = getattr(_obs_module, name, None) if name else None
+    if (
+        name
+        and name in _custom_registry
+        and (
+            not isinstance(sentinel, ObsFunc) or sentinel.unsupported_reason is not None
+        )
+    ):
+        return _custom_registry[name]
     if isinstance(sentinel, ObsFunc) and sentinel.unsupported_reason is None:
         return sentinel
     # Fall back to term name when the function name is missing or unsupported
     if term_name:
+        if term_name in _custom_registry:
+            return _custom_registry[term_name]
         fallback = getattr(_obs_module, term_name, None)
         if isinstance(fallback, ObsFunc):
             return fallback
@@ -209,10 +224,13 @@ def _adapt_term_func(func: Any) -> TermFunc:
     sentinel = getattr(_term_module, name, None) if name else None
     if isinstance(sentinel, TermFunc):
         return sentinel
+    if name and name in _custom_term_registry:
+        return _custom_term_registry[name]
     raise ValueError(
         f"No mjswan mapping for mjlab termination function '{name}'. "
         f"Ensure a matching TermFunc sentinel exists in "
-        f"mjswan.envs.mdp.terminations."
+        f"mjswan.envs.mdp.terminations, or register one with "
+        f"mjswan.envs.mdp.terminations.register_termination_func()."
     )
 
 
@@ -400,7 +418,99 @@ def resolve_action_scales(
             setattr(term, "offset", _resolve(offset))
 
 
+# ---------------------------------------------------------------------------
+# Event adaptation
+# ---------------------------------------------------------------------------
+
+
+def _adapt_event_func(func: Any) -> EventFunc:
+    """Convert an mjlab event callable to an mjswan ``EventFunc`` sentinel."""
+    if isinstance(func, EventFunc):
+        return func
+    name = getattr(func, "__name__", None)
+    sentinel = getattr(_events_module, name, None) if name else None
+    if isinstance(sentinel, EventFunc):
+        return sentinel
+    if name and name in _custom_event_registry:
+        return _custom_event_registry[name]
+    raise ValueError(
+        f"No mjswan mapping for mjlab event function '{name}'. "
+        f"Register one with mjswan.envs.mdp.events.register_event_func()."
+    )
+
+
+def _sanitize_event_params(params: dict[str, Any]) -> dict[str, Any]:
+    """Strip mjlab-only event params while keeping joint scoping data."""
+    if not params:
+        return params
+
+    result = {
+        k: v for k, v in params.items() if k != "asset_cfg" and not _is_from_mjlab(v)
+    }
+    asset_cfg = params.get("asset_cfg")
+    if not _is_from_mjlab(asset_cfg):
+        return result
+
+    entity_name = getattr(asset_cfg, "name", None)
+    if entity_name:
+        result["entity_name"] = entity_name
+
+    joint_names = getattr(asset_cfg, "joint_names", None)
+    if isinstance(joint_names, (list, tuple)):
+        result["joint_names"] = [str(name) for name in joint_names]
+    elif isinstance(joint_names, str):
+        result["joint_names"] = [joint_names]
+
+    joint_ids = getattr(asset_cfg, "joint_ids", None)
+    if isinstance(joint_ids, (list, tuple)):
+        result["joint_ids"] = [int(idx) for idx in joint_ids]
+
+    return result
+
+
+def _adapt_event_cfg(term: Any) -> MjswanEventTermCfg | None:
+    """Convert a single mjlab ``EventTermCfg`` to mjswan.
+
+    Only ``mode="reset"`` events are meaningful for the browser runtime.
+    """
+    mode = getattr(term, "mode", "reset")
+    if mode != "reset":
+        return None
+    try:
+        func = _adapt_event_func(term.func)
+    except ValueError as exc:
+        warnings.warn(str(exc), category=RuntimeWarning, stacklevel=3)
+        return None
+    raw_params = dict(getattr(term, "params", None) or {})
+    params = _sanitize_event_params(raw_params)
+    return MjswanEventTermCfg(func=func, mode=mode, params=params)
+
+
+def adapt_events(
+    events: Mapping[str, Any] | None,
+) -> list[dict[str, Any]] | None:
+    """Adapt event configs, converting mjlab types if detected.
+
+    Returns a list of serialized event dicts ready for JSON output,
+    filtering to ``mode="reset"`` only.
+    """
+    if not events:
+        return None
+    result: list[dict[str, Any]] = []
+    for key, term in events.items():
+        if isinstance(term, MjswanEventTermCfg):
+            if term.mode == "reset":
+                result.append(term.to_dict())
+        elif _is_from_mjlab(term):
+            adapted = _adapt_event_cfg(term)
+            if adapted is not None:
+                result.append(adapted.to_dict())
+        # non-mjlab, non-mjswan entries are skipped
+    return result or None
+
+
 __all__ = [
+    "adapt_events",
     "adapt_observations",
     "adapt_actions",
     "adapt_terminations",

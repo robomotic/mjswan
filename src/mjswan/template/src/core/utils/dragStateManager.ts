@@ -104,6 +104,9 @@ export class DragStateManager {
 
         for (const intersect of intersects) {
             const obj = intersect.object;
+            if (this.shouldIgnoreForDrag(obj)) {
+                continue;
+            }
             // Only objects with bodyID > 0 are draggable (excludes world/plane)
             if ('bodyID' in obj && typeof obj.bodyID === 'number' && obj.bodyID > 0) {
                 this.physicsObject = obj;
@@ -131,6 +134,17 @@ export class DragStateManager {
         }
 
         // If no object with bodyID is found, controls remain enabled
+    }
+
+    private shouldIgnoreForDrag(object: THREE.Object3D): boolean {
+        let current: THREE.Object3D | null = object;
+        while (current) {
+            if (current.userData?.ignoreDragForce === true) {
+                return true;
+            }
+            current = current.parent;
+        }
+        return false;
     }
 
     private move(x: number, y: number): void {

@@ -29,11 +29,48 @@ class TermFunc:
         defaults: Default parameters merged into the JSON config entry.
         unsupported_reason: If set, this sentinel is accepted for API
             compatibility but raises ``NotImplementedError`` at build time.
+        ts_src: Absolute path to a ``.ts`` file that exports the class
+            named ``ts_name``. When set, the file is injected into the
+            browser bundle at build time so the custom termination class is
+            available to the browser-side ``TerminationManager``. Leave
+            ``None`` for built-in classes already present in
+            ``terminations.ts``.
     """
 
     ts_name: str
     defaults: dict = field(default_factory=dict)
     unsupported_reason: str | None = None
+    ts_src: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Custom termination registry
+# ---------------------------------------------------------------------------
+
+_custom_registry: dict[str, TermFunc] = {}
+"""Maps mjlab termination function names to user-supplied ``TermFunc`` sentinels.
+
+Populated via :func:`register_termination_func`. The mjlab adapter checks this
+registry as a fallback after the built-in sentinel lookup fails.
+"""
+
+
+def register_termination_func(mjlab_name: str, sentinel: TermFunc) -> None:
+    """Register a custom ``TermFunc`` sentinel for an mjlab termination.
+
+    Call this before :meth:`~mjswan.Builder.build` so the adapter can
+    resolve the function and the builder can inject any custom TypeScript
+    source into the browser bundle.
+
+    Args:
+        mjlab_name: The mjlab termination function name
+            (e.g. ``"out_of_terrain_bounds"``).
+        sentinel: A :class:`TermFunc` describing the browser-side
+            implementation. Set ``unsupported_reason`` to mark the
+            termination as unsupported. Set ``ts_src`` to the absolute path
+            of a ``.ts`` file that exports the class named by ``ts_name``.
+    """
+    _custom_registry[mjlab_name] = sentinel
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +143,7 @@ nan_detection = TermFunc(
 
 __all__ = [
     "TermFunc",
+    "register_termination_func",
     "time_out",
     "bad_orientation",
     "root_height_below_minimum",

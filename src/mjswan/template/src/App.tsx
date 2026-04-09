@@ -38,6 +38,8 @@ interface SceneConfig {
   splats?: SplatConfig[];
   splatSection?: boolean;
   camera?: ViewerConfig;
+  events?: import('./core/event/EventBase').EventConfig[];
+  terrainData?: import('./core/event/EventBase').TerrainData;
 }
 
 interface ProjectConfig {
@@ -498,6 +500,8 @@ function AppContent() {
           policyConfigPath={policyConfigPath}
           splatConfig={resolvedSplatConfig}
           cameraConfig={currentScene?.camera}
+          eventsConfig={currentScene?.events}
+          terrainData={currentScene?.terrainData}
           onError={handleViewerError}
           onReady={handleViewerReady}
           onRuntimeReady={handleRuntimeReady}

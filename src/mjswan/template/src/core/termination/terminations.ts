@@ -1,5 +1,6 @@
 import { TerminationBase, type TerminationConfig } from './TerminationBase';
 import type { PolicyState } from '../policy/types';
+import { CustomTerminations } from './custom_terminations';
 
 /**
  * Terminate when the episode step count exceeds max_episode_length.
@@ -80,11 +81,16 @@ export class RootHeightBelowMinimum extends TerminationBase {
 
 export type TerminationConstructor = new (config: TerminationConfig) => TerminationBase;
 
+const BuiltinTerminations: Record<string, TerminationConstructor> = {
+  TimeOut,
+  BadOrientation,
+  RootHeightBelowMinimum,
+};
+
 /**
  * Registry mapping termination class names to constructors.
  */
 export const Terminations: Record<string, TerminationConstructor> = {
-  TimeOut,
-  BadOrientation,
-  RootHeightBelowMinimum,
+  ...BuiltinTerminations,
+  ...CustomTerminations,
 };

@@ -521,6 +521,25 @@ class TestSaveWebPolicyJson:
         data = self._policy_json(self._run(builder, tmp_path), "Policy")
         assert data["onnx"]["path"] == "policy.onnx"
 
+    def test_config_path_onnx_path_updated_when_extras_present(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        config_file = tmp_path / "policy_cfg.json"
+        config_file.write_text(json.dumps({"onnx": {"path": "stale.onnx"}}))
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            config_path=str(config_file),
+            extras={"model_overrides": {"geom_friction": [1.0, 0.5, 0.25]}},
+        )
+        data = self._policy_json(self._run(builder, tmp_path), "Policy")
+        assert data["onnx"]["path"] == "policy.onnx"
+        assert data["extras"] == {
+            "model_overrides": {"geom_friction": [1.0, 0.5, 0.25]}
+        }
+
     def test_config_path_actions_absent_from_json_when_not_set(
         self, tmp_path, minimal_model, minimal_onnx
     ):

@@ -13,7 +13,6 @@ export function createLights({
   mujoco,
   mjModel,
   mujocoRoot,
-  bodies,
 }: CreateLightsParams): THREE.Light[] {
   const lights: THREE.Light[] = [];
   const ambientSum = new THREE.Color(0, 0, 0);
@@ -132,17 +131,7 @@ export function createLights({
         }
       }
 
-      const bodyId = mjModel.light_bodyid[l];
-      if (bodyId >= 0 && bodies[bodyId]) {
-        bodies[bodyId].add(light);
-        const isDir = lightType === mujoco.mjtLightType.mjLIGHT_DIRECTIONAL.value;
-        const isSpot = lightType === mujoco.mjtLightType.mjLIGHT_SPOT.value;
-        if (isDir || isSpot) {
-          bodies[bodyId].add((light as THREE.DirectionalLight | THREE.SpotLight).target);
-        }
-      } else {
-        mujocoRoot.add(light);
-      }
+      mujocoRoot.add(light);
       lights.push(light);
     }
   }
@@ -159,10 +148,15 @@ export function createLights({
 
     const headDiffuse = new THREE.Color().fromArray(vis.headlight.diffuse as number[]);
     const headSpecular = new THREE.Color().fromArray(vis.headlight.specular as number[]);
+    const headCombined = headDiffuse.clone().add(headSpecular);
+    const headLuminance = Math.max(headCombined.r, headCombined.g, headCombined.b);
 
     const headLight = new THREE.DirectionalLight();
-    headLight.color = headDiffuse.clone().add(headSpecular);
-    headLight.intensity = 0.8 * Math.PI;
+    headLight.color =
+      headLuminance > 0
+        ? headCombined.multiplyScalar(1 / headLuminance)
+        : new THREE.Color(0, 0, 0);
+    headLight.intensity = headLuminance * Math.PI * 0.7;
     headLight.castShadow = false;
 
     mujocoRoot.add(headLight.target);
@@ -173,19 +167,10 @@ export function createLights({
     lights.push(headLight);
   }
 
-  const ambientColor = ambientSum.equals(new THREE.Color(0, 0, 0))
-    ? new THREE.Color(1, 1, 1)
-    : ambientSum;
-  const ambientLight = new THREE.AmbientLight(ambientColor, 0.5);
-  mujocoRoot.add(ambientLight);
-  lights.push(ambientLight);
-
-  if (lights.length === 0) {
-    console.warn('No active lights found in MuJoCo model; adding default light.');
-    const defaultLight = new THREE.DirectionalLight();
-    defaultLight.intensity = 0.8 * Math.PI;
-    mujocoRoot.add(defaultLight);
-    lights.push(defaultLight);
+  if (!ambientSum.equals(new THREE.Color(0, 0, 0))) {
+    const ambientLight = new THREE.AmbientLight(ambientSum, 1.0);
+    mujocoRoot.add(ambientLight);
+    lights.push(ambientLight);
   }
 
   return lights;

@@ -65,5 +65,11 @@ mjswan-*.tgz
 .claude/commands/*
 !.claude/commands/*.md
 
+# Auto-generated at build time
+src/mjswan/template/src/core/observation/custom_observations.ts
+src/mjswan/template/src/core/command/custom_commands.ts
+src/mjswan/template/src/core/termination/custom_terminations.ts
+src/mjswan/template/src/core/engine/viewer_config_defaults.ts
+
 # Docs
 docs/site

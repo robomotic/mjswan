@@ -1,4 +1,5 @@
 import type { MainModule, MjData, MjModel } from '@mujoco/mujoco';
+import type { Scene } from 'three';
 
 import type { CommandsConfig } from '../command';
 
@@ -6,6 +7,7 @@ export type PolicyRunnerContext = {
   mujoco: MainModule;
   mjModel: MjModel | null;
   mjData: MjData | null;
+  scene?: Scene | null;
 };
 
 export type PolicyState = {
@@ -52,6 +54,7 @@ export type PolicyConfig = {
   policy_module?: string;
   policy_joint_names?: string[];
   default_joint_pos?: number[];
+  encoder_bias?: number[];
   action_scale?: number[] | number;
   stiffness?: number[] | number;
   damping?: number[] | number;

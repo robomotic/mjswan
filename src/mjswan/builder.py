@@ -56,6 +56,7 @@ class Builder:
         task_id: str,
         *,
         project_name: str = "mjlab",
+        play: bool = False,
         base_path: str = "/",
         gtm_id: str | None = None,
     ) -> Builder:
@@ -68,6 +69,8 @@ class Builder:
         Args:
             task_id: mjlab task identifier (e.g. ``"go2_flat"``).
             project_name: Name for the auto-created project. Defaults to ``"mjlab"``.
+            play: Whether to load mjlab's play/evaluation config instead of the
+                training config for the auto-created scene.
             base_path: Base path for the application (e.g., ``"/mjswan/"``).
             gtm_id: Optional Google Tag Manager container ID.
 
@@ -88,7 +91,7 @@ class Builder:
         """
         builder = cls(base_path=base_path, gtm_id=gtm_id)
         project = builder.add_project(name=project_name)
-        project.add_mjlab_scene(task_id)
+        project.add_mjlab_scene(task_id, play=play)
         return builder
 
     def add_project(self, name: str, *, id: str | None = None) -> ProjectHandle:
@@ -195,6 +198,12 @@ class Builder:
                             **(
                                 {"camera": scene.viewer.to_dict()}
                                 if scene.viewer and scene.viewer.to_dict()
+                                else {}
+                            ),
+                            **({"events": scene.events} if scene.events else {}),
+                            **(
+                                {"terrainData": scene.terrain_data}
+                                if scene.terrain_data
                                 else {}
                             ),
                             "policies": [
@@ -458,6 +467,22 @@ class Builder:
                                             name: cfg.to_dict()
                                             for name, cfg in policy.actions.items()
                                         }
+                                    if getattr(policy, "policy_joint_names", None):
+                                        data["policy_joint_names"] = (
+                                            policy.policy_joint_names
+                                        )
+                                    if getattr(policy, "default_joint_pos", None):
+                                        data["default_joint_pos"] = (
+                                            policy.default_joint_pos
+                                        )
+                                    if getattr(policy, "encoder_bias", None):
+                                        data["encoder_bias"] = policy.encoder_bias
+                                    if getattr(policy, "initial_qpos", None):
+                                        data["initial_qpos"] = policy.initial_qpos
+                                    if getattr(policy, "initial_qvel", None):
+                                        data["initial_qvel"] = policy.initial_qvel
+                                    if getattr(policy, "extras", None):
+                                        data["extras"] = policy.extras
                                     # Serialize termination terms
                                     if policy.terminations:
                                         data["terminations"] = {
@@ -490,6 +515,8 @@ class Builder:
                                 data["policy_joint_names"] = policy.policy_joint_names
                             if policy.default_joint_pos:
                                 data["default_joint_pos"] = policy.default_joint_pos
+                            if policy.encoder_bias:
+                                data["encoder_bias"] = policy.encoder_bias
                             if policy.commands:
                                 data["commands"] = {
                                     name: cmd.to_dict()

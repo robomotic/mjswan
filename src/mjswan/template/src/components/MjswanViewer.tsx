@@ -3,6 +3,7 @@ import { mjswanRuntime, WasmMemoryLimitError } from '../core/engine/runtime';
 import type { ViewerConfig } from '../core/engine/viewer_config';
 import type { SplatConfig } from '../core/scene/splat';
 import type { MainModule } from '@mujoco/mujoco';
+import type { EventConfig, TerrainData } from '../core/event/EventBase';
 
 type MjswanViewerProps = {
   scenePath: string;
@@ -10,6 +11,8 @@ type MjswanViewerProps = {
   policyConfigPath?: string | null;
   splatConfig?: SplatConfig | null;
   cameraConfig?: ViewerConfig | null;
+  eventsConfig?: EventConfig[] | null;
+  terrainData?: TerrainData | null;
   onStatusChange?: (status: string) => void;
   onError?: (error: Error) => void;
   onReady?: () => void;
@@ -26,6 +29,8 @@ const MjswanViewer = ({
   policyConfigPath,
   splatConfig,
   cameraConfig,
+  eventsConfig,
+  terrainData,
   onStatusChange,
   onError,
   onReady,
@@ -72,7 +77,7 @@ const MjswanViewer = ({
       }
 
       notify('Loading scene assets...');
-      await runtimeRef.current.loadEnvironment(scenePath, policyConfigPath ?? null, splatConfigRef.current ?? null, cameraConfig ?? null);
+      await runtimeRef.current.loadEnvironment(scenePath, policyConfigPath ?? null, splatConfigRef.current ?? null, cameraConfig ?? null, eventsConfig ?? null, terrainData ?? null);
       if (cancelled) {
         return;
       }
@@ -105,7 +110,7 @@ const MjswanViewer = ({
       runtimeRef.current?.dispose();
       runtimeRef.current = null;
     };
-  }, [scenePath, baseUrl, policyConfigPath, cameraConfig, onStatusChange, onError, onReady]);
+  }, [scenePath, baseUrl, policyConfigPath, cameraConfig, eventsConfig, terrainData, onStatusChange, onError, onReady]);
 
   return <div ref={containerRef} className="viewer" />;
 };

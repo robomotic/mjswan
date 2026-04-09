@@ -213,19 +213,9 @@ to select the target joint.
 # ---------------------------------------------------------------------------
 
 builtin_sensor = ObsFunc(
-    ts_name="",
-    unsupported_reason=(
-        "builtin_sensor is not supported in mjswan: direct MuJoCo sensordata "
-        "slice access is not available in the browser runtime. "
-        "Consider reading the sensor value via the policy state instead."
-    ),
+    ts_name="BuiltinSensor",
 )
 """Raw data from a named BuiltinSensor.
-
-.. note::
-    Not supported in mjswan. Accepted for API compatibility so that mjlab
-    configs can be imported without modification, but raises
-    ``NotImplementedError`` at build time.
 """
 
 height_scan = ObsFunc(
