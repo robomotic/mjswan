@@ -73,3 +73,6 @@ src/mjswan/template/src/core/engine/viewer_config_defaults.ts
 
 # Docs
 docs/site
+
+# Temporal CORS/COOP enable
+src/mjswan/template/public/_headers

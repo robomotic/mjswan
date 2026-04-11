@@ -303,6 +303,42 @@ class TestToZipDeflated:
         assert spec.texturedir == orig_texturedir
         assert [(m.name, m.file) for m in spec.meshes] == orig_mesh_files
 
+    def test_falls_back_to_basename_for_spec_assets(self):
+        class FakeMesh:
+            def __init__(self, file: str):
+                self.file = file
+
+        class FakeSpec:
+            modelname = "fake"
+            modelfiledir = ""
+            meshdir = ""
+            texturedir = ""
+            textures = []
+            hfields = []
+            skins = []
+            assets = {"clavicle.stl": b"mesh-bytes"}
+
+            def __init__(self):
+                self.meshes = [FakeMesh("../myo_sim/meshes/clavicle.stl")]
+
+            def to_xml(self) -> str:
+                return (
+                    '<mujoco model="fake"><asset>'
+                    '<mesh name="clavicle" file="../myo_sim/meshes/clavicle.stl"/>'
+                    "</asset></mujoco>"
+                )
+
+        buf = io.BytesIO()
+        to_zip_deflated(FakeSpec(), buf)
+        buf.seek(0)
+
+        with zipfile.ZipFile(buf) as zf:
+            assert "myo_sim/meshes/clavicle.stl" in zf.namelist()
+            assert zf.read("myo_sim/meshes/clavicle.stl") == b"mesh-bytes"
+            xml = zf.read("fake.xml").decode()
+            mesh = ET.fromstring(xml).find(".//mesh")
+            assert mesh.get("file") == "myo_sim/meshes/clavicle.stl"
+
 
 # ===========================================================================
 # L2 — collect_spec_assets (synthetic MjSpec)

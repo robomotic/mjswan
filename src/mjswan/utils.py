@@ -43,6 +43,29 @@ def _make_zip_safe_path(path: str) -> str:
     return _strip_leading_dotdot(posix_path)
 
 
+def _iter_asset_lookup_candidates(path: str) -> list[str]:
+    """Return candidate spec.assets keys for a referenced asset path.
+
+    ``spec.assets`` may contain any of:
+    - the original relative path,
+    - a normalized ZIP-safe path (leading ``..`` stripped), or
+    - only the basename when the source spec used an absolute meshdir/texturedir.
+
+    MyoSuite scenes hit the third case after mjlab attaches child specs into the
+    final scene spec, so we try progressively looser matches in that order.
+    """
+    posix_path = path.replace("\\", "/")
+    candidates: list[str] = []
+    for candidate in (
+        posix_path,
+        _make_zip_safe_path(posix_path),
+        posixpath.basename(posix_path),
+    ):
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
+    return candidates
+
+
 def collect_spec_assets(spec: mujoco.MjSpec) -> dict[str, bytes]:
     """Collect all asset files referenced by a MjSpec from disk.
 
@@ -239,13 +262,17 @@ def to_zip_deflated(spec: mujoco.MjSpec, file: Union[str, IO[bytes]]) -> None:
         assets = spec.assets
         if not assets:
             return None
-        if rel in assets:
-            return assets[rel]
-        # Suffix match: spec.assets key ends with "/" + rel
+        candidates = _iter_asset_lookup_candidates(rel)
+        for candidate in candidates:
+            if candidate in assets:
+                return assets[candidate]
+        # Suffix match: spec.assets key ends with "/" + candidate
         # (e.g. "assets/robot/model.stl" ends with "robot/model.stl")
-        for key, data in assets.items():
-            if key.endswith("/" + rel):
-                return data
+        for candidate in candidates:
+            for key, data in assets.items():
+                key_posix = key.replace("\\", "/")
+                if key_posix.endswith("/" + candidate):
+                    return data
         return None
 
     for mesh in spec.meshes:

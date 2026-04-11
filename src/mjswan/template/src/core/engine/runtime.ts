@@ -407,7 +407,10 @@ export class mjswanRuntime {
           camera: this.camera,
           container: this.container,
           controls: this.controls,
+          draggableBodyIds: this.dynamicBodyIds,
         });
+      } else {
+        this.dragStateManager.setDraggableBodyIds(this.dynamicBodyIds);
       }
 
       this.loadingScene = null;
@@ -1060,6 +1063,9 @@ export class mjswanRuntime {
     }
 
     const bodyId = dragged.bodyID as number;
+    if (this.dynamicBodyIds && !this.dynamicBodyIds.has(bodyId)) {
+      return;
+    }
 
     // Update body positions (for drag calculation)
     for (let b = 0; b < this.mjModel.nbody; b++) {
@@ -1383,7 +1389,10 @@ export class mjswanRuntime {
         camera: this.camera,
         container: this.container,
         controls: this.controls,
+        draggableBodyIds: this.dynamicBodyIds,
       });
+    } else {
+      this.dragStateManager.setDraggableBodyIds(this.dynamicBodyIds);
     }
   }
 

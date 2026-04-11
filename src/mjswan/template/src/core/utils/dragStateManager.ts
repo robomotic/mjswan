@@ -6,6 +6,7 @@ export interface DragStateManagerOptions {
     camera: THREE.Camera;
     container: HTMLElement;
     controls: { enabled: boolean };
+    draggableBodyIds?: Set<number> | null;
 }
 
 export class DragStateManager {
@@ -14,6 +15,7 @@ export class DragStateManager {
     private camera: THREE.Camera;
     private container: HTMLElement;
     private controls: { enabled: boolean };
+    private draggableBodyIds: Set<number> | null;
 
     private mousePos: THREE.Vector2;
     private raycaster: THREE.Raycaster;
@@ -41,6 +43,7 @@ export class DragStateManager {
         this.camera = options.camera;
         this.container = options.container;
         this.controls = options.controls;
+        this.draggableBodyIds = options.draggableBodyIds ?? null;
 
         this.mousePos = new THREE.Vector2();
         this.raycaster = new THREE.Raycaster();
@@ -107,8 +110,7 @@ export class DragStateManager {
             if (this.shouldIgnoreForDrag(obj)) {
                 continue;
             }
-            // Only objects with bodyID > 0 are draggable (excludes world/plane)
-            if ('bodyID' in obj && typeof obj.bodyID === 'number' && obj.bodyID > 0) {
+            if (this.isDraggableObject(obj)) {
                 this.physicsObject = obj;
                 this.grabDistance = intersect.distance;
 
@@ -134,6 +136,24 @@ export class DragStateManager {
         }
 
         // If no object with bodyID is found, controls remain enabled
+    }
+
+    setDraggableBodyIds(bodyIds: Set<number> | null): void {
+        this.draggableBodyIds = bodyIds;
+    }
+
+    private isDraggableObject(object: THREE.Object3D): boolean {
+        if (!('bodyID' in object) || typeof object.bodyID !== 'number') {
+            return false;
+        }
+        const bodyId = object.bodyID;
+        if (bodyId <= 0) {
+            return false;
+        }
+        if (this.draggableBodyIds && !this.draggableBodyIds.has(bodyId)) {
+            return false;
+        }
+        return true;
     }
 
     private shouldIgnoreForDrag(object: THREE.Object3D): boolean {
