@@ -13,6 +13,7 @@ interface PolicyConfig {
   name: string;
   metadata: Record<string, unknown>;
   config?: string;
+  default?: boolean;
 }
 
 interface ViewerConfig {
@@ -194,14 +195,15 @@ function pickPolicy(scene: SceneConfig, policyQuery: string | null): string | nu
   if (!scene.policies.length) {
     return null;
   }
+  const fallback = scene.policies.find((policy) => policy.default) ?? scene.policies[0];
   if (!policyQuery) {
-    return scene.policies[0].name;
+    return fallback.name;
   }
   const normalized = policyQuery.trim().toLowerCase();
   const found =
     scene.policies.find((policy) => policy.name.toLowerCase() === normalized) ||
     scene.policies.find((policy) => sanitizeName(policy.name) === normalized);
-  return found?.name ?? scene.policies[0].name;
+  return found?.name ?? fallback.name;
 }
 
 function updateUrlParams(

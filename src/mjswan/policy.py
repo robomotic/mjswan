@@ -98,6 +98,12 @@ class PolicyConfig:
     extras: dict[str, Any] | None = None
     """Optional extra policy config payload serialized verbatim into JSON."""
 
+    default: bool = False
+    """Whether this policy should be the initially selected one in the viewer.
+
+    When multiple policies in a scene have ``default=True``, the first one wins.
+    """
+
 
 class PolicyHandle:
     """Handle for configuring a policy and its commands.

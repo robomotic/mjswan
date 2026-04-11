@@ -227,6 +227,11 @@ class Builder:
                                             if getattr(policy, "source_path", None)
                                             else {}
                                         ),
+                                        **(
+                                            {"default": True}
+                                            if getattr(policy, "default", False)
+                                            else {}
+                                        ),
                                     }
                                 )
                                 for policy in scene.policies

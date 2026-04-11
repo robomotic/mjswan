@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from .managers.observation_manager import ObservationGroupCfg
     from .managers.termination_manager import TerminationTermCfg
     from .project import ProjectHandle
+    from .wandb_utils import PtOnnxExportContext
 
 
 def _get_scene_model(scene_config: SceneConfig) -> mujoco.MjModel | None:
@@ -216,6 +217,7 @@ class SceneHandle:
         initial_qpos: list[float] | None = None,
         initial_qvel: list[float] | None = None,
         extras: dict[str, Any] | None = None,
+        default: bool = False,
     ) -> PolicyHandle:
         """Add an ONNX policy to this scene.
 
@@ -299,6 +301,7 @@ class SceneHandle:
             initial_qpos=initial_qpos,
             initial_qvel=initial_qvel,
             extras=extras,
+            default=default,
         )
         self._config.policies.append(policy_config)
         return PolicyHandle(policy_config, self)
@@ -309,7 +312,7 @@ class SceneHandle:
         *,
         only_latest: bool = False,
         task_id: str | None = None,
-        export_context: Any | None = None,
+        export_context: PtOnnxExportContext | None = None,
         config_path: str | None = None,
         metadata: dict[str, Any] | None = None,
         observations: dict[str, ObservationGroupCfg] | dict[str, Any] | None = None,
@@ -453,6 +456,16 @@ class SceneHandle:
             finally:
                 if owned_export_context:
                     export_context.close()
+
+        if handles:
+
+            def _step(handle: PolicyHandle) -> int:
+                match = re.search(r"_(\d+)", handle._config.name)
+                return int(match.group(1)) if match else -1
+
+            latest = max(handles, key=_step)
+            latest._config.default = True
+
         return handles
 
     def add_splat(
