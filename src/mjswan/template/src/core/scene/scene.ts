@@ -281,8 +281,6 @@ export async function loadSceneFromURL(
 
   const textDecoder = new TextDecoder('utf-8');
   const namesArray = new Uint8Array(mjModel.names);
-  const fullString = textDecoder.decode(namesArray.slice());
-  const names = fullString.split(textDecoder.decode(new ArrayBuffer(1)));
 
   const mujocoRoot = new THREE.Group();
   mujocoRoot.name = 'MuJoCo Root';
@@ -333,6 +331,7 @@ export async function loadSceneFromURL(
         break;
       }
       case mujoco.mjtGeom.mjGEOM_HFIELD.value:
+        geometry = createHFieldGeometry(mjModel, g);
         break;
       case mujoco.mjtGeom.mjGEOM_SPHERE.value: {
         geometry = new THREE.SphereGeometry(size[0]);
@@ -567,10 +566,13 @@ export async function loadSceneFromURL(
     }
 
     const mesh = new THREE.Mesh(geometry, currentMaterial as THREE.Material);
+    const ignoreDragForce = bodies[b].name === 'terrain';
 
-    mesh.castShadow = g === 0 ? false : true;
+    mesh.castShadow = ignoreDragForce ? false : g !== 0;
     mesh.receiveShadow = type !== mujoco.mjtGeom.mjGEOM_MESH.value;
     mesh.bodyID = b;
+    mesh.userData.ignoreDragForce = ignoreDragForce;
+    bodies[b].userData.ignoreDragForce = ignoreDragForce;
     bodies[b].add(mesh);
     getPosition(mjModel.geom_pos, g, mesh.position);
     if (type !== mujoco.mjtGeom.mjGEOM_PLANE.value) {
@@ -619,15 +621,21 @@ export async function loadSceneFromURL(
   const lights: THREE.Light[] = createLights({ mujoco, mjModel, mujocoRoot, bodies });
 
   for (let b = 0; b < mjModel.nbody; b++) {
-    if (b === 0 || !bodies[0]) {
-      mujocoRoot.add(bodies[b]);
-    } else if (bodies[b]) {
-      bodies[0].add(bodies[b]);
-    } else {
+    if (!bodies[b]) {
       bodies[b] = new THREE.Group();
-      bodies[b].name = names[b + 1];
+      const startIdx = mjModel.name_bodyadr[b];
+      let endIdx = startIdx;
+      while (endIdx < namesArray.length && namesArray[endIdx] !== 0) {
+        endIdx++;
+      }
+      bodies[b].name = textDecoder.decode(namesArray.subarray(startIdx, endIdx));
       bodies[b].bodyID = b;
       bodies[b].has_custom_mesh = false;
+    }
+
+    if (b === 0 || !bodies[0]) {
+      mujocoRoot.add(bodies[b]);
+    } else {
       bodies[0].add(bodies[b]);
     }
   }
@@ -645,6 +653,76 @@ export async function loadSceneFromURL(
   }
 
   return [mjModel, mjData, bodies, lights];
+}
+
+function createHFieldGeometry(mjModel: MjModel, geomId: number): THREE.BufferGeometry | undefined {
+  const hfieldId = mjModel.geom_dataid[geomId];
+  if (hfieldId < 0) {
+    return undefined;
+  }
+
+  const nrow = mjModel.hfield_nrow[hfieldId];
+  const ncol = mjModel.hfield_ncol[hfieldId];
+  if (nrow < 2 || ncol < 2) {
+    return undefined;
+  }
+
+  const sx = mjModel.hfield_size[hfieldId * 4 + 0];
+  const sy = mjModel.hfield_size[hfieldId * 4 + 1];
+  const sz = mjModel.hfield_size[hfieldId * 4 + 2];
+  const adr = mjModel.hfield_adr[hfieldId];
+  const data = mjModel.hfield_data.subarray(adr, adr + nrow * ncol);
+
+  const positions = new Float32Array(nrow * ncol * 3);
+  const uvs = new Float32Array(nrow * ncol * 2);
+  const dx = ncol > 1 ? (2 * sx) / (ncol - 1) : 0;
+  const dy = nrow > 1 ? (2 * sy) / (nrow - 1) : 0;
+
+  let vertexOffset = 0;
+  let uvOffset = 0;
+  for (let r = 0; r < nrow; r++) {
+    const yMj = dy * r - sy;
+    for (let c = 0; c < ncol; c++) {
+      const xMj = dx * c - sx;
+      const zMj = data[r * ncol + c] * sz;
+
+      positions[vertexOffset++] = xMj;
+      positions[vertexOffset++] = zMj;
+      positions[vertexOffset++] = -yMj;
+
+      uvs[uvOffset++] = ncol > 1 ? c / (ncol - 1) : 0;
+      uvs[uvOffset++] = nrow > 1 ? r / (nrow - 1) : 0;
+    }
+  }
+
+  const indexCount = (nrow - 1) * (ncol - 1) * 6;
+  const indices = indexCount > 65535
+    ? new Uint32Array(indexCount)
+    : new Uint16Array(indexCount);
+
+  let indexOffset = 0;
+  for (let r = 0; r < nrow - 1; r++) {
+    for (let c = 0; c < ncol - 1; c++) {
+      const i0 = r * ncol + c;
+      const i1 = i0 + 1;
+      const i2 = i0 + ncol;
+      const i3 = i2 + 1;
+
+      indices[indexOffset++] = i0;
+      indices[indexOffset++] = i1;
+      indices[indexOffset++] = i3;
+      indices[indexOffset++] = i0;
+      indices[indexOffset++] = i3;
+      indices[indexOffset++] = i2;
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 export function getPosition(

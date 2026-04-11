@@ -34,6 +34,9 @@ import type { PolicyConfig } from '../policy/types';
 import { TrackingPolicy } from '../policy/modules/TrackingPolicy';
 import { LocomotionPolicy } from '../policy/modules/LocomotionPolicy';
 import { getCommandManager, type CommandTermContext, type CommandsConfig } from '../command';
+import { EventManager } from '../event/EventManager';
+import { Events } from '../event/events';
+import type { TerrainData } from '../event/EventBase';
 
 type RuntimeOptions = {
   baseUrl?: string;
@@ -86,6 +89,7 @@ export class mjswanRuntime {
     bodies: Map<number, BodyState>;
     tendons: ReturnType<typeof createTendonState>;
   };
+  private dynamicBodyIds: Set<number> | null;
   private loopPromise: Promise<void> | null;
   private running: boolean;
   private timestep: number;
@@ -111,6 +115,7 @@ export class mjswanRuntime {
     actionScale: Float32Array;
     actionOffset: Float32Array;
     defaultJointPos: Float32Array;
+    encoderBias: Float32Array;
     // Per-actuator flag: true = position actuator (ctrl=target_pos, PD internal),
     // false = motor actuator (ctrl=torque, PD computed in browser from kp/kd).
     positionActuator: boolean[];
@@ -121,6 +126,8 @@ export class mjswanRuntime {
   private onnxInputDict: Record<string, ort.Tensor> | null;
   private onnxInferencing: boolean;
   private terminationManager: TerminationManager | null;
+  private eventManager: EventManager | null;
+  private terrainData: TerrainData | null;
   private vrButton: HTMLElement | null;
   private splatMesh: SplatMesh | null;
   private colliderMesh: THREE.Group | null;
@@ -199,6 +206,7 @@ export class mjswanRuntime {
       bodies: new Map(),
       tendons: createTendonState(),
     };
+    this.dynamicBodyIds = null;
 
     this.mjModel = null;
     this.mjData = null;
@@ -221,6 +229,8 @@ export class mjswanRuntime {
     this.onnxInputDict = null;
     this.onnxInferencing = false;
     this.terminationManager = null;
+    this.eventManager = null;
+    this.terrainData = null;
     this.splatMesh = null;
     this.colliderMesh = null;
     this.cameraState = { trackBodyId: null, prevBodyPos: null };
@@ -235,8 +245,17 @@ export class mjswanRuntime {
     scenePath: string,
     policyConfigPath: string | null = null,
     splatConfig: SplatConfig | null = null,
-    cameraConfig: ViewerConfig | null = null
+    cameraConfig: ViewerConfig | null = null,
+    eventsConfig: import('../event/EventBase').EventConfig[] | null = null,
+    terrainData: TerrainData | null = null
   ): Promise<void> {
+    this.terrainData = terrainData;
+    if (eventsConfig && eventsConfig.length > 0) {
+      this.eventManager = new EventManager(eventsConfig, Events);
+      console.log(`[EventManager] ${this.eventManager.size} reset event(s) loaded`);
+    } else {
+      this.eventManager = null;
+    }
     await this.stop();
 
     // Dispose previous splat/collider before switching scenes
@@ -272,6 +291,7 @@ export class mjswanRuntime {
       this.bodies = null;
       this.lights = [];
       this.mujocoRoot = null;
+      this.dynamicBodyIds = null;
 
       // Start tracking resources
       this.resourceTracker.startTracking(this.mujoco);
@@ -368,6 +388,10 @@ export class mjswanRuntime {
       this.mujocoRoot = this.scene.getObjectByName('MuJoCo Root') as THREE.Group | null;
 
       this.mujoco.mj_forward(this.mjModel, this.mjData);
+      updateLightsFromData(this.mujoco, this.mjData, this.lights);
+      updateHeadlightFromCamera(this.camera, this.lights);
+      this.dynamicBodyIds = this.computeDynamicBodyIds(this.mjModel);
+      this.syncStaticBodiesFromData();
 
       this.timestep = this.mjModel.opt.timestep || 0.001;
       this.decimation = Math.max(1, Math.round(0.02 / this.timestep));
@@ -534,6 +558,7 @@ export class mjswanRuntime {
     this.onnxInputDict = null;
     this.onnxInferencing = false;
     this.terminationManager = null;
+    // Note: eventManager and terrainData are scene-level state set in loadEnvironment; do not clear here.
 
     // Clear existing commands when switching policies
     const commandManager = getCommandManager();
@@ -555,6 +580,9 @@ export class mjswanRuntime {
 
     try {
       const { config } = await this.fetchPolicyConfig(policyConfigPath);
+      this.resetSimulationState();
+      this.mujoco.mj_forward(this.mjModel, this.mjData);
+      this.updateCachedState();
 
       // Initialize commands from policy config if present
       if (config.commands && typeof config.commands === 'object') {
@@ -585,6 +613,7 @@ export class mjswanRuntime {
         mujoco: this.mujoco,
         mjModel: this.mjModel,
         mjData: this.mjData,
+        scene: this.scene,
       });
 
       this.policyRunner = runner;
@@ -669,6 +698,7 @@ export class mjswanRuntime {
     actionScale: Float32Array;
     actionOffset: Float32Array;
     defaultJointPos: Float32Array;
+    encoderBias: Float32Array;
     positionActuator: boolean[];
     kp: Float32Array;
     kd: Float32Array;
@@ -698,6 +728,14 @@ export class mjswanRuntime {
       const defaultJointPos = new Float32Array(n);
       for (let i = 0; i < n; i++) {
         defaultJointPos[i] = allDefaultJointPos[mapping.actionIndices[i]];
+      }
+
+      const allEncoderBias = Array.isArray(config.encoder_bias)
+        ? Float32Array.from(config.encoder_bias)
+        : new Float32Array(jointNames.length);
+      const encoderBias = new Float32Array(n);
+      for (let i = 0; i < n; i++) {
+        encoderBias[i] = allEncoderBias[mapping.actionIndices[i]] ?? 0.0;
       }
 
       const kp = this.normalizeControlArray(configStiffness, n, 0.0, subsetJointNames);
@@ -730,6 +768,7 @@ export class mjswanRuntime {
         actionScale,
         actionOffset,
         defaultJointPos,
+        encoderBias,
         positionActuator,
         kp,
         kd,
@@ -858,7 +897,18 @@ export class mjswanRuntime {
     if (!this.mjModel || !this.mjData) {
       return;
     }
-    this.mujoco.mj_resetData(this.mjModel, this.mjData);
+    if (this.mjModel.nkey > 0) {
+      this.mujoco.mj_resetDataKeyframe(this.mjModel, this.mjData, 0);
+    } else {
+      this.mujoco.mj_resetData(this.mjModel, this.mjData);
+    }
+    if (this.eventManager) {
+      this.eventManager.onReset({
+        mjModel: this.mjModel,
+        mjData: this.mjData,
+        terrainData: this.terrainData,
+      });
+    }
     getCommandManager().resetTerms();
     this.mujoco.mj_forward(this.mjModel, this.mjData);
     this.lastSimState.bodies.clear();
@@ -890,7 +940,20 @@ export class mjswanRuntime {
     const allActions = this.policyRunner?.getLastActions() ?? new Float32Array(0);
 
     for (const term of this.policyControl) {
-      const { controlType, ctrlAdr, qposAdr, qvelAdr, actionIndices, actionScale, actionOffset, defaultJointPos, positionActuator, kp, kd } =
+      const {
+        controlType,
+        ctrlAdr,
+        qposAdr,
+        qvelAdr,
+        actionIndices,
+        actionScale,
+        actionOffset,
+        defaultJointPos,
+        encoderBias,
+        positionActuator,
+        kp,
+        kd,
+      } =
         term;
       const numJoints = ctrlAdr.length;
 
@@ -899,7 +962,11 @@ export class mjswanRuntime {
           const ctrlIndex = ctrlAdr[i];
           if (ctrlIndex < 0) continue;
           const actionValue = allActions[actionIndices[i]] ?? 0;
-          const target = defaultJointPos[i] + actionOffset[i] + actionScale[i] * actionValue;
+          const target =
+            defaultJointPos[i] +
+            actionOffset[i] +
+            actionScale[i] * actionValue -
+            encoderBias[i];
 
           if (positionActuator[i]) {
             // Position actuator (biastype=affine): ctrl = target joint position.
@@ -1046,7 +1113,11 @@ export class mjswanRuntime {
     if (!this.mjModel || !this.mjData || !this.bodies) {
       return;
     }
+    const dynamicBodyIds = this.dynamicBodyIds;
     for (let b = 0; b < this.mjModel.nbody; b++) {
+      if (dynamicBodyIds && !dynamicBodyIds.has(b)) {
+        continue;
+      }
       if (this.bodies[b]) {
         if (!this.lastSimState.bodies.has(b)) {
           this.lastSimState.bodies.set(b, {
@@ -1074,7 +1145,40 @@ export class mjswanRuntime {
   }
 
   private applyViewerConfig(config: ViewerConfig | null): void {
-    this.cameraState = applyViewerConfig(config, this.camera, this.controls, this.mjModel);
+    this.cameraState = applyViewerConfig(config, this.camera, this.controls, this.mjModel, this.mjData);
+  }
+
+  private computeDynamicBodyIds(mjModel: MjModel): Set<number> {
+    const dynamic = new Set<number>();
+    for (let bodyId = 1; bodyId < mjModel.nbody; bodyId++) {
+      let current = bodyId;
+      while (current > 0) {
+        if (mjModel.body_jntnum[current] > 0) {
+          dynamic.add(bodyId);
+          break;
+        }
+        current = mjModel.body_parentid[current];
+      }
+    }
+    return dynamic;
+  }
+
+  private syncStaticBodiesFromData(): void {
+    if (!this.mjModel || !this.mjData || !this.bodies) {
+      return;
+    }
+    const dynamicBodyIds = this.dynamicBodyIds;
+    for (let bodyId = 0; bodyId < this.mjModel.nbody; bodyId++) {
+      if (dynamicBodyIds?.has(bodyId)) {
+        continue;
+      }
+      const body = this.bodies[bodyId];
+      if (!body) {
+        continue;
+      }
+      getPosition(this.mjData.xpos, bodyId, body.position);
+      getQuaternion(this.mjData.xquat, bodyId, body.quaternion);
+    }
   }
 
   private render = (): void => {
@@ -1093,7 +1197,6 @@ export class mjswanRuntime {
         if (body) {
           body.position.copy(state.position);
           body.quaternion.copy(state.quaternion);
-          body.updateWorldMatrix(true, false);
         }
       }
 
@@ -1162,6 +1265,7 @@ export class mjswanRuntime {
     this.bodies = null;
     this.lights = [];
     this.mujocoRoot = null;
+    this.dynamicBodyIds = null;
     this.lastSimState.bodies.clear();
   }
 
@@ -1260,6 +1364,8 @@ export class mjswanRuntime {
 
     // Run forward dynamics
     this.mujoco.mj_forward(this.mjModel, this.mjData);
+    this.dynamicBodyIds = this.computeDynamicBodyIds(this.mjModel);
+    this.syncStaticBodiesFromData();
 
     // Update runtime parameters
     this.timestep = this.mjModel.opt.timestep || 0.001;

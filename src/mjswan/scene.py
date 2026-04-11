@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from .managers.observation_manager import ObservationGroupCfg
     from .managers.termination_manager import TerminationTermCfg
     from .project import ProjectHandle
+    from .wandb_utils import PtOnnxExportContext
 
 
 def _get_scene_model(scene_config: SceneConfig) -> mujoco.MjModel | None:
@@ -170,6 +171,12 @@ class SceneConfig:
     viewer: ViewerConfig | None = None
     """Optional viewer configuration for this scene."""
 
+    events: list[Any] | None = None
+    """Optional list of scene-level reset events (serialized EventTermCfg dicts)."""
+
+    terrain_data: dict[str, Any] | None = None
+    """Optional terrain data (e.g. flat_patches) for browser-side event execution."""
+
     @property
     def scene_filename(self) -> str:
         """Return the scene filename based on which field is set."""
@@ -206,6 +213,11 @@ class SceneHandle:
         terminations: dict[str, TerminationTermCfg] | dict[str, Any] | None = None,
         policy_joint_names: list[str] | None = None,
         default_joint_pos: list[float] | None = None,
+        encoder_bias: list[float] | None = None,
+        initial_qpos: list[float] | None = None,
+        initial_qvel: list[float] | None = None,
+        extras: dict[str, Any] | None = None,
+        default: bool = False,
     ) -> PolicyHandle:
         """Add an ONNX policy to this scene.
 
@@ -225,6 +237,12 @@ class SceneHandle:
                 mjlab ``ActionTermCfg`` subclass instances.
             terminations: Termination term configurations.  Accepts both
                 mjswan and mjlab ``TerminationTermCfg`` instances.
+            initial_qpos: Optional initial qpos payload serialized into the
+                generated policy config JSON.
+            initial_qvel: Optional initial qvel payload serialized into the
+                generated policy config JSON.
+            extras: Optional extra JSON payload merged into the generated
+                policy config.
 
         Returns:
             PolicyHandle for configuring the policy (adding commands, etc.)
@@ -279,6 +297,11 @@ class SceneHandle:
             terminations=adapted_terminations,
             policy_joint_names=policy_joint_names,
             default_joint_pos=default_joint_pos,
+            encoder_bias=encoder_bias,
+            initial_qpos=initial_qpos,
+            initial_qvel=initial_qvel,
+            extras=extras,
+            default=default,
         )
         self._config.policies.append(policy_config)
         return PolicyHandle(policy_config, self)
@@ -289,12 +312,14 @@ class SceneHandle:
         *,
         only_latest: bool = False,
         task_id: str | None = None,
+        export_context: PtOnnxExportContext | None = None,
         config_path: str | None = None,
         metadata: dict[str, Any] | None = None,
         observations: dict[str, ObservationGroupCfg] | dict[str, Any] | None = None,
         commands: Mapping[str, Any] | None = None,
         actions: Mapping[str, ActionTermCfg] | Mapping[str, Any] | None = None,
         terminations: dict[str, TerminationTermCfg] | dict[str, Any] | None = None,
+        extras: dict[str, Any] | None = None,
     ) -> list[PolicyHandle]:
         """Add ONNX policies fetched from one or more W&B runs to this scene.
 
@@ -322,6 +347,7 @@ class SceneHandle:
             actions: Action term configurations applied to all fetched policies.
             terminations: Termination term configurations applied to all fetched
                 policies.
+            extras: Optional extra JSON payload applied to every fetched policy.
 
         Returns:
             Flat list of :class:`PolicyHandle` instances across all runs, in the
@@ -376,8 +402,8 @@ class SceneHandle:
 
         handles = []
         seen_names: set[str] = set()
-        for path in run_paths:
-            if only_latest:
+        if only_latest:
+            for path in run_paths:
                 from .wandb_utils import fetch_onnx_from_wandb_run
 
                 name, model = fetch_onnx_from_wandb_run(path)
@@ -392,31 +418,54 @@ class SceneHandle:
                         commands=commands,
                         actions=actions,
                         terminations=terminations,
+                        extras=extras,
                     )
                     handles.append(handle)
-            else:
-                assert task_id is not None
-                from .wandb_utils import fetch_pt_onnx_from_wandb_run
+        else:
+            assert task_id is not None
+            from .wandb_utils import (
+                create_pt_onnx_export_context,
+                fetch_pt_onnx_from_wandb_run,
+            )
 
-                for name, model, joint_names, djp in fetch_pt_onnx_from_wandb_run(
-                    path, task_id
-                ):
-                    if name in seen_names:
-                        continue
-                    seen_names.add(name)
-                    handle = self.add_policy(
-                        name=name,
-                        policy=model,
-                        config_path=config_path,
-                        metadata=metadata,
-                        observations=observations,
-                        commands=commands,
-                        actions=actions,
-                        terminations=terminations,
-                        policy_joint_names=joint_names or None,
-                        default_joint_pos=djp or None,
-                    )
-                    handles.append(handle)
+            owned_export_context = export_context is None
+            export_context = export_context or create_pt_onnx_export_context(task_id)
+            try:
+                for path in run_paths:
+                    for name, model in fetch_pt_onnx_from_wandb_run(
+                        path, task_id, export_context=export_context
+                    ):
+                        if name in seen_names:
+                            continue
+                        seen_names.add(name)
+                        handle = self.add_policy(
+                            name=name,
+                            policy=model,
+                            config_path=config_path,
+                            metadata=metadata,
+                            observations=observations,
+                            commands=commands,
+                            actions=actions,
+                            terminations=terminations,
+                            policy_joint_names=export_context.joint_names or None,
+                            default_joint_pos=export_context.default_joint_pos or None,
+                            encoder_bias=export_context.encoder_bias or None,
+                            extras=extras,
+                        )
+                        handles.append(handle)
+            finally:
+                if owned_export_context:
+                    export_context.close()
+
+        if handles:
+
+            def _step(handle: PolicyHandle) -> int:
+                match = re.search(r"_(\d+)", handle._config.name)
+                return int(match.group(1)) if match else -1
+
+            latest = max(handles, key=_step)
+            latest._config.default = True
+
         return handles
 
     def add_splat(
@@ -552,6 +601,23 @@ class SceneHandle:
             ))
         """
         self._config.viewer = config
+        return self
+
+    def set_events(self, events: Mapping[str, Any]) -> SceneHandle:
+        """Set scene-level reset events.
+
+        Accepts a dict of ``EventTermCfg`` instances (mjswan or mjlab).
+        Only ``mode="reset"`` events are passed to the browser runtime.
+
+        Args:
+            events: Dict mapping event names to ``EventTermCfg`` instances.
+
+        Returns:
+            Self for method chaining.
+        """
+        from .adapters.mjlab_adapter import adapt_events
+
+        self._config.events = adapt_events(events)
         return self
 
     def set_metadata(self, key: str, value: Any) -> SceneHandle:

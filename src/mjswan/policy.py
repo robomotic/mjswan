@@ -12,8 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 import onnx
 
-from .adapters import adapt_commands
-from .command import CommandInput, CommandTermConfig, ui_command, velocity_command
+from .command import CommandTermConfig, velocity_command
 
 if TYPE_CHECKING:
     from .envs.mdp.actions.actions import ActionTermCfg
@@ -83,27 +82,46 @@ class PolicyConfig:
     commands this pose.  Must be in the same order as ``policy_joint_names``.
     """
 
+    encoder_bias: list[float] | None = None
+    """Per-joint encoder bias corresponding to ``policy_joint_names``.
+
+    Used by the browser runtime to mirror mjlab's joint-position action path:
+    the final target written to actuators is ``processed_action - encoder_bias``.
+    """
+
+    initial_qpos: list[float] | None = None
+    """Optional initial qpos samples or defaults for runtime reset logic."""
+
+    initial_qvel: list[float] | None = None
+    """Optional initial qvel samples or defaults for runtime reset logic."""
+
+    extras: dict[str, Any] | None = None
+    """Optional extra policy config payload serialized verbatim into JSON."""
+
+    default: bool = False
+    """Whether this policy should be the initially selected one in the viewer.
+
+    When multiple policies in a scene have ``default=True``, the first one wins.
+    """
+
 
 class PolicyHandle:
     """Handle for configuring a policy and its commands.
 
-    This class provides methods for adding commands and customizing policy properties.
-    Similar to viser's client handles, this allows for a fluent API pattern.
+    Commands should be passed via the ``commands=`` parameter of
+    :meth:`~mjswan.scene.SceneHandle.add_policy`.
+    :meth:`add_velocity_command` is provided as a convenience shortcut for the
+    common locomotion case.
 
     Example:
         policy = scene.add_policy(
             policy=onnx.load("locomotion.onnx"),
             name="Locomotion",
             config_path="locomotion.json",
+            commands={"velocity": mjswan.velocity_command()},
         )
-        policy.add_command(
-            name="velocity",
-            inputs=[
-                mjswan.Slider("lin_vel_x", "Forward Velocity", range=(-1.0, 1.0)),
-                mjswan.Slider("lin_vel_y", "Lateral Velocity", range=(-0.5, 0.5)),
-                mjswan.Slider("ang_vel_z", "Yaw Rate", range=(-1.0, 1.0)),
-            ]
-        )
+        # or using the shortcut:
+        policy = scene.add_policy(...).add_velocity_command()
     """
 
     def __init__(self, policy_config: PolicyConfig, scene: SceneHandle) -> None:
@@ -119,55 +137,6 @@ class PolicyHandle:
     def model(self) -> onnx.ModelProto:
         """ONNX model for the policy."""
         return self._config.model
-
-    def add_command(
-        self,
-        name: str,
-        inputs: list[CommandInput],
-    ) -> PolicyHandle:
-        """Add a command group to this policy.
-
-        A command group represents a set of related inputs (sliders, buttons)
-        that are passed together to an observation. The name is used by
-        observations to retrieve command values.
-
-        Args:
-            name: Identifier for this command group (e.g., "velocity").
-                  This name is used by GeneratedCommands observation.
-            inputs: List of command input configurations (Slider, Button, etc.)
-
-        Returns:
-            Self for method chaining.
-
-        Example:
-            policy.add_command(
-                name="velocity",
-                inputs=[
-                    mjswan.Slider("lin_vel_x", "Forward Velocity", range=(-1.0, 1.0)),
-                    mjswan.Slider("lin_vel_y", "Lateral Velocity", range=(-0.5, 0.5)),
-                    mjswan.Slider("ang_vel_z", "Yaw Rate", range=(-1.0, 1.0)),
-                ]
-            )
-        """
-        self._config.commands[name] = ui_command(list(inputs))
-        return self
-
-    def add_command_term(
-        self,
-        name: str,
-        term: CommandTermConfig | Any,
-    ) -> PolicyHandle:
-        """Add a command term directly.
-
-        Accepts either an mjswan ``CommandTermConfig`` or an mjlab
-        ``CommandTermCfg`` registered via ``mjswan.register_command_term()``.
-        """
-
-        adapted = adapt_commands({name: term})
-        if adapted is None or name not in adapted:
-            raise ValueError(f"Failed to adapt command term '{name}'.")
-        self._config.commands[name] = adapted[name]
-        return self
 
     def add_velocity_command(
         self,

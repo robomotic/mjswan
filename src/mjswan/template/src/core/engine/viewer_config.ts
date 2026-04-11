@@ -66,7 +66,8 @@ export function applyViewerConfig(
   config: ViewerConfig | null,
   camera: THREE.PerspectiveCamera,
   controls: OrbitControls,
-  mjModel: MjModel | null
+  mjModel: MjModel | null,
+  mjData: MjData | null
 ): ViewerState {
   const state: ViewerState = { trackBodyId: null, prevBodyPos: null };
   controls.enabled = true;
@@ -87,8 +88,16 @@ export function applyViewerConfig(
   const originType = config.originType ?? 'AUTO';
 
   if (originType === 'ASSET_BODY' && config.bodyName && mjModel) {
+    const requestedName = config.bodyName;
+    const entityName = config.entityName;
+    const prefixedName = entityName ? `${entityName}/${requestedName}` : null;
     for (let b = 0; b < mjModel.nbody; b++) {
-      if (mjModel.body(b).name === config.bodyName) {
+      const bodyName = mjModel.body(b).name;
+      if (
+        bodyName === requestedName ||
+        bodyName === prefixedName ||
+        bodyName.endsWith(`/${requestedName}`)
+      ) {
         state.trackBodyId = b;
         break;
       }
@@ -101,6 +110,16 @@ export function applyViewerConfig(
     state.trackBodyId = 1;
   }
   // WORLD: no tracking.
+
+  if (state.trackBodyId !== null && mjData) {
+    const bodyPos = mjcToThreeCoordinate(
+      mjData.xpos.slice(state.trackBodyId * 3, state.trackBodyId * 3 + 3)
+    );
+    camera.position.add(bodyPos);
+    controls.target.add(bodyPos);
+    state.prevBodyPos = bodyPos;
+    controls.update();
+  }
 
   return state;
 }

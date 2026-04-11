@@ -5,14 +5,16 @@ Tests the "contract" of the builder's hierarchical configuration API:
   Builder → ProjectHandle → SceneHandle → PolicyHandle
 """
 
+import sys
 from pathlib import Path
+from types import ModuleType
 
 import mujoco
 import pytest
 
 import mjswan
 from mjswan.builder import Builder
-from mjswan.command import CommandTermConfig, SliderConfig
+from mjswan.command import CommandTermConfig, SliderConfig, ui_command
 from mjswan.project import _collect_mjlab_scene_assets
 from mjswan.scene import SceneConfig
 
@@ -115,6 +117,56 @@ class TestProjectHandle:
             "prop.bin": b"prop",
         }
 
+    def test_add_mjlab_scene_passes_play_flag_to_load_env_cfg(
+        self, monkeypatch, minimal_spec
+    ):
+        calls: list[tuple[str, object, object]] = []
+
+        class FakeSceneCfg:
+            def __init__(self):
+                self.num_envs = 16
+                self.terrain = None
+                self.entities = {}
+
+        fake_scene_cfg = FakeSceneCfg()
+
+        class FakeEnvCfg:
+            scene = fake_scene_cfg
+            viewer = None
+            events = None
+
+        class FakeScene:
+            def __init__(self, scene_cfg, device: str):
+                calls.append(("scene", scene_cfg, device))
+                self.spec = minimal_spec
+                self.terrain = None
+
+        def fake_load_env_cfg(task_id: str, play: bool = False):
+            calls.append(("load_env_cfg", task_id, play))
+            return FakeEnvCfg()
+
+        mjlab_module = ModuleType("mjlab")
+        mjlab_scene_module = ModuleType("mjlab.scene")
+        mjlab_scene_module.Scene = FakeScene
+        mjlab_tasks_module = ModuleType("mjlab.tasks")
+        mjlab_registry_module = ModuleType("mjlab.tasks.registry")
+        mjlab_registry_module.load_env_cfg = fake_load_env_cfg
+
+        monkeypatch.setitem(sys.modules, "mjlab", mjlab_module)
+        monkeypatch.setitem(sys.modules, "mjlab.scene", mjlab_scene_module)
+        monkeypatch.setitem(sys.modules, "mjlab.tasks", mjlab_tasks_module)
+        monkeypatch.setitem(sys.modules, "mjlab.tasks.registry", mjlab_registry_module)
+
+        project = Builder().add_project(name="P")
+        scene = project.add_mjlab_scene("Mjlab-Velocity-Rough-Unitree-G1", play=True)
+
+        assert isinstance(scene, mjswan.SceneHandle)
+        assert calls == [
+            ("load_env_cfg", "Mjlab-Velocity-Rough-Unitree-G1", True),
+            ("scene", fake_scene_cfg, "cpu"),
+        ]
+        assert fake_scene_cfg.num_envs == 1
+
 
 # ===========================================================================
 # SceneHandle — add_policy, set_metadata
@@ -149,12 +201,16 @@ class TestSceneHandle:
 
 
 # ===========================================================================
-# PolicyHandle — add_command, add_velocity_command, set_metadata
+# PolicyHandle — commands=, add_velocity_command, set_metadata
 # ===========================================================================
 class TestPolicyHandle:
-    def _make_policy(self, minimal_model, minimal_onnx):
+    def _make_scene(self, minimal_model):
         builder = Builder()
         scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        return builder, scene
+
+    def _make_policy(self, minimal_model, minimal_onnx):
+        builder, scene = self._make_scene(minimal_model)
         policy = scene.add_policy(name="Policy", policy=minimal_onnx)
         return builder, policy
 
@@ -174,30 +230,32 @@ class TestPolicyHandle:
         result = policy.add_velocity_command()
         assert result is policy
 
-    def test_add_command_stores_inputs(self, minimal_model, minimal_onnx):
-        builder, policy = self._make_policy(minimal_model, minimal_onnx)
-        policy.add_command(
-            name="custom",
-            inputs=[SliderConfig(name="x", label="X", range=(-1.0, 1.0))],
+    def test_commands_param_stores_inputs(self, minimal_model, minimal_onnx):
+        builder, scene = self._make_scene(minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            commands={
+                "custom": ui_command(
+                    [SliderConfig(name="x", label="X", range=(-1.0, 1.0))]
+                )
+            },
         )
         commands = builder.get_projects()[0].scenes[0].policies[0].commands
         assert "custom" in commands
         assert commands["custom"].ui is not None
         assert len(commands["custom"].ui.inputs) == 1
 
-    def test_add_command_returns_self_for_chaining(self, minimal_model, minimal_onnx):
-        _, policy = self._make_policy(minimal_model, minimal_onnx)
-        result = policy.add_command(name="cmd", inputs=[])
-        assert result is policy
-
-    def test_add_command_term_stores_serialized_term(self, minimal_model, minimal_onnx):
-        builder, policy = self._make_policy(minimal_model, minimal_onnx)
-        result = policy.add_command_term(
-            name="goal",
-            term=CommandTermConfig(term_name="DummyCommand", params={"value": 1}),
+    def test_commands_param_stores_command_term(self, minimal_model, minimal_onnx):
+        builder, scene = self._make_scene(minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            commands={
+                "goal": CommandTermConfig(term_name="DummyCommand", params={"value": 1})
+            },
         )
         commands = builder.get_projects()[0].scenes[0].policies[0].commands
-        assert result is policy
         assert commands["goal"].term_name == "DummyCommand"
         assert commands["goal"].params["value"] == 1
 
@@ -206,3 +264,26 @@ class TestPolicyHandle:
         policy.set_metadata("version", "1.0")
         cfg = builder.get_projects()[0].scenes[0].policies[0]
         assert cfg.metadata["version"] == "1.0"
+
+    def test_add_policy_from_wandb_only_latest_preserves_extras(
+        self, minimal_model, minimal_onnx, monkeypatch
+    ):
+        scene = Builder().add_project(name="P").add_scene(name="S", model=minimal_model)
+
+        monkeypatch.setattr(
+            "mjswan.wandb_utils.fetch_onnx_from_wandb_run",
+            lambda _path: ("latest", minimal_onnx),
+        )
+
+        extras = {
+            "model_overrides": {"geom_friction": [1.0, 0.5, 0.25]},
+            "reset_samples": {"qpos": [[0.0]], "qvel": [[0.0]]},
+        }
+        handles = scene.add_policy_from_wandb(
+            "entity/project/run",
+            only_latest=True,
+            extras=extras,
+        )
+
+        assert len(handles) == 1
+        assert handles[0]._config.extras == extras

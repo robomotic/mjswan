@@ -294,6 +294,146 @@ class ClientBuilder:
 
         output_path.write_text("\n".join(lines))
 
+    def generate_custom_terminations(self) -> None:
+        """Generate custom_terminations.ts from user-registered terminations."""
+        from mjswan.envs.mdp.terminations import _custom_registry
+
+        output_path = (
+            self.project_dir / "src" / "core" / "termination" / "custom_terminations.ts"
+        )
+
+        custom_entries = {
+            name: sentinel
+            for name, sentinel in _custom_registry.items()
+            if sentinel.ts_src is not None and sentinel.ts_name
+        }
+
+        if not custom_entries:
+            output_path.write_text(
+                "// Custom termination classes registered via"
+                " mjswan.envs.mdp.terminations.register_termination_func().\n"
+                "// This file is auto-generated at build time — do not edit manually.\n"
+                "\n"
+                "type TerminationConstructor ="
+                " new (config: import('./TerminationBase').TerminationConfig) => import('./TerminationBase').TerminationBase;\n"
+                "\n"
+                "export const CustomTerminations:"
+                " Record<string, TerminationConstructor> = {};\n"
+            )
+            return
+
+        lines = [
+            "// Custom termination classes registered via"
+            " mjswan.envs.mdp.terminations.register_termination_func().",
+            "// This file is auto-generated at build time — do not edit manually.",
+            "",
+            "type TerminationConstructor = new (config: import('./TerminationBase').TerminationConfig) => import('./TerminationBase').TerminationBase;",
+            "",
+        ]
+
+        seen_imports: set[str] = set()
+        deduped_imports: list[str] = []
+        class_bodies: list[str] = []
+        class_names: list[str] = []
+        for sentinel in custom_entries.values():
+            src_path = Path(sentinel.ts_src).expanduser().resolve()  # type: ignore[arg-type]
+            if not src_path.exists():
+                raise FileNotFoundError(
+                    f"Custom termination ts_src not found: {src_path}"
+                )
+            src_lines = src_path.read_text().splitlines()
+            body_lines = []
+            for src_line in src_lines:
+                if src_line.startswith("import "):
+                    if src_line not in seen_imports:
+                        seen_imports.add(src_line)
+                        deduped_imports.append(src_line)
+                else:
+                    body_lines.append(src_line)
+            class_bodies.append("\n".join(body_lines).strip())
+            class_names.append(sentinel.ts_name)
+
+        lines.extend(deduped_imports)
+        lines.append("")
+        for body in class_bodies:
+            lines.append(body)
+            lines.append("")
+        lines.append(
+            "export const CustomTerminations: Record<string, TerminationConstructor> = {"
+        )
+        for cls in class_names:
+            lines.append(f"  {cls},")
+        lines.append("};")
+        lines.append("")
+
+        output_path.write_text("\n".join(lines))
+
+    def generate_custom_events(self) -> None:
+        """Generate custom_events.ts from user-registered event functions."""
+        from mjswan.envs.mdp.events import _custom_registry
+
+        output_path = self.project_dir / "src" / "core" / "event" / "custom_events.ts"
+
+        custom_entries = {
+            name: sentinel
+            for name, sentinel in _custom_registry.items()
+            if sentinel.ts_src is not None and sentinel.ts_name
+        }
+
+        if not custom_entries:
+            output_path.write_text(
+                "// Custom event classes registered via"
+                " mjswan.envs.mdp.events.register_event_func().\n"
+                "// This file is auto-generated at build time — do not edit manually.\n"
+                "\n"
+                "import type { EventConstructor } from './EventBase';\n"
+                "\n"
+                "export const CustomEvents: Record<string, EventConstructor> = {};\n"
+            )
+            return
+
+        lines = [
+            "// Custom event classes registered via"
+            " mjswan.envs.mdp.events.register_event_func().",
+            "// This file is auto-generated at build time — do not edit manually.",
+            "",
+            "import type { EventConstructor } from './EventBase';",
+            "",
+        ]
+
+        seen_imports: set[str] = set()
+        deduped_imports: list[str] = []
+        class_bodies: list[str] = []
+        class_names: list[str] = []
+        for sentinel in custom_entries.values():
+            src_path = Path(sentinel.ts_src).expanduser().resolve()  # type: ignore[arg-type]
+            if not src_path.exists():
+                raise FileNotFoundError(f"Custom event ts_src not found: {src_path}")
+            src_lines = src_path.read_text().splitlines()
+            body_lines = []
+            for src_line in src_lines:
+                if src_line.startswith("import "):
+                    if src_line not in seen_imports:
+                        seen_imports.add(src_line)
+                        deduped_imports.append(src_line)
+                else:
+                    body_lines.append(src_line)
+            class_bodies.append("\n".join(body_lines).strip())
+            class_names.append(sentinel.ts_name)
+
+        lines.extend(deduped_imports)
+        lines.append("")
+        for body in class_bodies:
+            lines.append(body)
+            lines.append("")
+        lines.append("export const CustomEvents: Record<string, EventConstructor> = {")
+        for cls in class_names:
+            lines.append(f"  {cls},")
+        lines.append("};")
+        lines.append("")
+
+        output_path.write_text("\n".join(lines))
+
     def generate_viewer_config_defaults(self) -> None:
         """Generate viewer_config_defaults.ts from Python ViewerConfig defaults."""
         from mjswan.viewer_config import ViewerConfig
@@ -332,6 +472,8 @@ class ClientBuilder:
             self.sync_version_from_python()
             self.generate_custom_observations()
             self.generate_custom_commands()
+            self.generate_custom_events()
+            self.generate_custom_terminations()
             self.generate_viewer_config_defaults()
             self.install_dependencies(clean=clean)
             env: dict[str, str] = {"MJSWAN_BASE_PATH": base_path}

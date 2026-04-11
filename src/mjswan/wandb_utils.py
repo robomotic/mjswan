@@ -2,10 +2,146 @@
 
 from __future__ import annotations
 
+import re
 import tempfile
+from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 
 import onnx
+
+
+@dataclass
+class PtOnnxExportContext:
+    """Reusable mjlab export state for repeated PT->ONNX conversion."""
+
+    env: Any
+    runner: Any
+    joint_names: list[str]
+    default_joint_pos: list[float]
+    encoder_bias: list[float]
+
+    def close(self) -> None:
+        self.env.close()
+
+
+def _extract_required_capacity(message: str, name: str) -> int | None:
+    match = re.search(rf"{name} overflow \({name} must be >= (\d+)\)", message)
+    if match is None:
+        return None
+    return int(match.group(1))
+
+
+def _next_capacity(required: int) -> int:
+    slack = max(32, required // 8)
+    return required + slack
+
+
+def create_pt_onnx_export_context(task_id: str) -> PtOnnxExportContext:
+    """Create a reusable mjlab export context for PT->ONNX conversion.
+
+    Builds the mjlab environment and runner once so that multiple
+    checkpoints can be loaded and exported without repeated startup cost.
+    Extracts core policy metadata (joint names, default joint positions,
+    encoder bias) from the action manager.
+    """
+    try:
+        import mjlab.tasks  # noqa: F401 — populates the task registry
+        from mjlab.envs import ManagerBasedRlEnv
+        from mjlab.rl import MjlabOnPolicyRunner, RslRlVecEnvWrapper
+        from mjlab.tasks.registry import load_env_cfg, load_rl_cfg, load_runner_cls
+    except ImportError as e:
+        raise ImportError(
+            "mjlab and torch are required for only_latest=False. "
+            "Install them with: pip install mjlab torch"
+        ) from e
+
+    env_cfg = load_env_cfg(task_id, play=True)
+    env_cfg.scene.num_envs = 1
+    agent_cfg = load_rl_cfg(task_id)
+
+    while True:
+        try:
+            env = ManagerBasedRlEnv(cfg=env_cfg, device="cpu")
+            break
+        except ValueError as exc:
+            message = str(exc)
+            required_nconmax = _extract_required_capacity(message, "nconmax")
+            required_njmax = _extract_required_capacity(message, "njmax")
+            if required_nconmax is None and required_njmax is None:
+                raise
+            if required_nconmax is not None:
+                env_cfg.sim.nconmax = _next_capacity(required_nconmax)
+            if required_njmax is not None:
+                env_cfg.sim.njmax = _next_capacity(required_njmax)
+
+    wrapped_env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
+
+    try:
+        runner_cls = load_runner_cls(task_id) or MjlabOnPolicyRunner
+        runner = runner_cls(wrapped_env, asdict(agent_cfg), device="cpu")
+    except Exception:
+        wrapped_env.close()
+        raise
+
+    # Extract core policy metadata from the action manager.
+    joint_names: list[str] = []
+    default_joint_pos: list[float] = []
+    encoder_bias: list[float] = []
+
+    inner_env = wrapped_env.env if hasattr(wrapped_env, "env") else wrapped_env
+
+    # Joint names, default positions, and encoder bias from the action manager.
+    action_mgr = getattr(inner_env, "action_manager", None)
+    if action_mgr is not None:
+        for term_name in action_mgr.active_terms:
+            term = action_mgr.get_term(term_name)
+            if not hasattr(term, "target_names"):
+                continue
+            entity_name = getattr(getattr(term, "cfg", None), "entity_name", None)
+            prefix = f"{entity_name}/" if entity_name else ""
+            joint_names = [f"{prefix}{n}" for n in term.target_names]
+            if hasattr(term, "offset") and term.offset is not None:
+                offset = term.offset
+                if hasattr(offset, "tolist"):
+                    flat = offset.flatten().tolist()
+                elif hasattr(offset, "__iter__"):
+                    flat = list(offset)
+                else:
+                    flat = [float(offset)] * len(joint_names)
+                default_joint_pos = flat[: len(joint_names)]
+            if entity_name:
+                entity = inner_env.scene[entity_name]
+                bias = entity.data.encoder_bias
+                if hasattr(bias, "detach"):
+                    bias = bias.detach()
+                if hasattr(bias, "cpu"):
+                    bias = bias.cpu()
+                if hasattr(term.target_ids, "detach"):
+                    target_ids = term.target_ids.detach()
+                else:
+                    target_ids = term.target_ids
+                if hasattr(target_ids, "cpu"):
+                    target_ids = target_ids.cpu()
+                if hasattr(target_ids, "tolist"):
+                    target_indices = target_ids.tolist()
+                else:
+                    target_indices = list(target_ids)
+                if hasattr(bias, "__getitem__"):
+                    selected_bias = bias[0, target_indices]
+                    if hasattr(selected_bias, "tolist"):
+                        encoder_bias = selected_bias.tolist()
+                    else:
+                        encoder_bias = list(selected_bias)
+            break
+
+    return PtOnnxExportContext(
+        env=wrapped_env,
+        runner=runner,
+        joint_names=joint_names,
+        default_joint_pos=default_joint_pos,
+        encoder_bias=encoder_bias,
+    )
 
 
 def fetch_onnx_from_wandb_run(run_path: str) -> tuple[str, onnx.ModelProto]:
@@ -49,7 +185,8 @@ def fetch_onnx_from_wandb_run(run_path: str) -> tuple[str, onnx.ModelProto]:
 def fetch_pt_onnx_from_wandb_run(
     run_path: str,
     task_id: str,
-) -> list[tuple[str, onnx.ModelProto, list[str], list[float]]]:
+    export_context: PtOnnxExportContext | None = None,
+) -> list[tuple[str, onnx.ModelProto]]:
     """Download all ``model_*.pt`` checkpoints from a W&B run and convert each to ONNX.
 
     Checkpoints are sorted by training step before conversion, so the returned
@@ -63,32 +200,17 @@ def fetch_pt_onnx_from_wandb_run(
         run_path: W&B run path in the format ``"entity/project/run_id"``.
         task_id: mjlab task identifier (e.g. ``"go2_flat"``). Used to
             reconstruct the environment and runner required for ONNX export.
+        export_context: Optional pre-built export context. When provided,
+            this context is reused and **not** closed by this function.
 
     Returns:
-        List of ``(policy_name, onnx_model, joint_names, default_joint_pos)``
-        tuples sorted by training step, where joint_names is the ordered list
-        of ACTUATED joints controlled by the policy and default_joint_pos is
-        the action=0 target pose in the same order.
+        List of ``(policy_name, onnx_model)`` tuples sorted by training step.
 
     Raises:
         ImportError: If ``mjlab`` or ``torch`` are not installed.
         ValueError: If no ``model_*.pt`` files are found in the run.
     """
-    import re
-    from dataclasses import asdict
-
     import wandb
-
-    try:
-        import mjlab.tasks  # noqa: F401 — populates the task registry
-        from mjlab.envs import ManagerBasedRlEnv
-        from mjlab.rl import MjlabOnPolicyRunner, RslRlVecEnvWrapper
-        from mjlab.tasks.registry import load_env_cfg, load_rl_cfg, load_runner_cls
-    except ImportError as e:
-        raise ImportError(
-            "mjlab and torch are required for only_latest=False. "
-            "Install them with: pip install mjlab torch"
-        ) from e
 
     api = wandb.Api()
     run = api.run(run_path)
@@ -101,71 +223,41 @@ def fetch_pt_onnx_from_wandb_run(
     # Sort by training step number (model_0.pt < model_50.pt < model_100.pt, …)
     pt_files.sort(key=lambda f: int(re.search(r"\d+", f.name).group()))  # type: ignore[union-attr]
 
-    results: list[tuple[str, onnx.ModelProto, list[str], list[float]]] = []
+    results: list[tuple[str, onnx.ModelProto]] = []
+    context = (
+        export_context
+        if export_context is not None
+        else create_pt_onnx_export_context(task_id)
+    )
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
-
-        # Build mjlab environment once — reused across all checkpoints.
-        env_cfg = load_env_cfg(task_id, play=True)
-        env_cfg.scene.num_envs = 1
-        agent_cfg = load_rl_cfg(task_id)
-
-        env = ManagerBasedRlEnv(cfg=env_cfg, device="cpu")
-        env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
-
         try:
-            runner_cls = load_runner_cls(task_id) or MjlabOnPolicyRunner
-            runner = runner_cls(env, asdict(agent_cfg), device="cpu")
-
-            # Collect the ACTUATED joints controlled by the policy. Observation
-            # terms may use a broader joint set (for example passive joints
-            # coupled via equality constraints), but control and ONNX output
-            # dimensions must remain aligned with the action manager.
-            joint_names: list[str] = []
-            default_joint_pos: list[float] = []
-            inner_env = env.env if hasattr(env, "env") else env
-            action_mgr = getattr(inner_env, "action_manager", None)
-            if action_mgr is not None:
-                for term_name in action_mgr.active_terms:
-                    term = action_mgr.get_term(term_name)
-                    if hasattr(term, "target_names"):
-                        entity_name = getattr(
-                            getattr(term, "cfg", None), "entity_name", None
-                        )
-                        prefix = f"{entity_name}/" if entity_name else ""
-                        joint_names = [f"{prefix}{n}" for n in term.target_names]
-                        # Default joint positions (the pose action=0 commands).
-                        if hasattr(term, "offset") and term.offset is not None:
-                            offset = term.offset
-                            if hasattr(offset, "tolist"):
-                                flat = offset.flatten().tolist()
-                            elif hasattr(offset, "__iter__"):
-                                flat = list(offset)
-                            else:
-                                flat = [float(offset)] * len(joint_names)
-                            default_joint_pos = flat[: len(joint_names)]
-                        break
-
             for wandb_file in pt_files:
                 wandb_file.download(root=tmp_dir, replace=True)
                 pt_path = tmp_path / wandb_file.name
                 name = pt_path.stem  # e.g. "model_0", "model_50"
                 onnx_filename = f"{name}.onnx"
 
-                runner.load(
+                context.runner.load(
                     str(pt_path),
                     load_cfg={"actor": True},
                     strict=True,
                     map_location="cpu",
                 )
-                runner.export_policy_to_onnx(tmp_dir, onnx_filename)
+                context.runner.export_policy_to_onnx(tmp_dir, onnx_filename)
 
                 model = onnx.load(str(tmp_path / onnx_filename))
-                results.append((name, model, joint_names, default_joint_pos))
+                results.append((name, model))
         finally:
-            env.close()
+            if export_context is None:
+                context.close()
 
     return results
 
 
-__all__ = ["fetch_onnx_from_wandb_run", "fetch_pt_onnx_from_wandb_run"]
+__all__ = [
+    "PtOnnxExportContext",
+    "create_pt_onnx_export_context",
+    "fetch_onnx_from_wandb_run",
+    "fetch_pt_onnx_from_wandb_run",
+]

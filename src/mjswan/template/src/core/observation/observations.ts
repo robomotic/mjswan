@@ -882,6 +882,122 @@ export class JointPosCosSin extends ObservationBase {
   }
 }
 
+export class BuiltinSensor extends ObservationBase {
+  private readonly sensorName: string;
+  private readonly sensorAdr: number;
+  private readonly sensorDim: number;
+  private readonly historySteps: number;
+  private readonly history: Float32Array[];
+  private readonly scale: Float32Array | null;
+  private readonly clipRange: [number, number] | null;
+
+  constructor(runner: PolicyRunner, config: ObservationConfig) {
+    super(runner, config);
+    this.sensorName = (config.sensor_name as string | undefined) ?? '';
+    const mjModel = runner.getContext()?.mjModel ?? null;
+    const resolved = this.resolveSensor(mjModel, this.sensorName);
+    this.sensorAdr = resolved.adr;
+    this.sensorDim = resolved.dim;
+    this.historySteps = Math.max(1, Math.floor((config.history_steps as number | undefined) ?? 1));
+    this.history = Array.from({ length: this.historySteps }, () => new Float32Array(this.sensorDim));
+    this.scale = normalizeScale(config.scale, this.sensorDim, 1.0);
+    this.clipRange = this.normalizeClipRange(config.clip);
+  }
+
+  get size(): number {
+    return this.sensorDim * this.historySteps;
+  }
+
+  reset(): void {
+    const value = this.computeCurrent();
+    for (const buffer of this.history) {
+      buffer.set(value);
+    }
+  }
+
+  update(): void {
+    for (let i = this.history.length - 1; i > 0; i--) {
+      this.history[i].set(this.history[i - 1]);
+    }
+    this.history[0].set(this.computeCurrent());
+  }
+
+  compute(): Float32Array {
+    if (this.historySteps === 1) {
+      return new Float32Array(this.history[0]);
+    }
+    const output = new Float32Array(this.size);
+    let offset = 0;
+    for (const buffer of this.history) {
+      output.set(buffer, offset);
+      offset += buffer.length;
+    }
+    return output;
+  }
+
+  private computeCurrent(): Float32Array {
+    const sensordata = this.runner.getContext()?.mjData?.sensordata;
+    const out = new Float32Array(this.sensorDim);
+    if (sensordata === undefined) {
+      return out;
+    }
+    for (let i = 0; i < this.sensorDim; i++) {
+      out[i] = sensordata[this.sensorAdr + i] ?? 0.0;
+    }
+    if (this.scale) {
+      for (let i = 0; i < out.length; i++) {
+        out[i] *= this.scale[i] ?? 1.0;
+      }
+    }
+    if (this.clipRange) {
+      const [clipMin, clipMax] = this.clipRange;
+      for (let i = 0; i < out.length; i++) {
+        out[i] = Math.min(clipMax, Math.max(clipMin, out[i]));
+      }
+    }
+    return out;
+  }
+
+  private resolveSensor(mjModel: MjModel | null, sensorName: string): { adr: number; dim: number } {
+    if (mjModel === null) {
+      return { adr: 0, dim: 1 };
+    }
+    const names = this.getModelSensorNames(mjModel);
+    const sensorIndex = names.indexOf(sensorName);
+    if (sensorIndex < 0) {
+      throw new Error(`BuiltinSensor: sensor "${sensorName}" not found in model`);
+    }
+    return {
+      adr: mjModel.sensor_adr[sensorIndex],
+      dim: mjModel.sensor_dim[sensorIndex],
+    };
+  }
+
+  private getModelSensorNames(mjModel: MjModel): string[] {
+    const namesArray = new Uint8Array(mjModel.names);
+    const decoder = new TextDecoder();
+    const names: string[] = [];
+    for (let i = 0; i < mjModel.nsensor; i++) {
+      let start = mjModel.name_sensoradr[i];
+      let end = start;
+      while (end < namesArray.length && namesArray[end] !== 0) {
+        end++;
+      }
+      names.push(decoder.decode(namesArray.subarray(start, end)));
+    }
+    return names;
+  }
+
+  private normalizeClipRange(clip: unknown): [number, number] | null {
+    if (!Array.isArray(clip) || clip.length < 2) {
+      return null;
+    }
+    const minValue = typeof clip[0] === 'number' ? clip[0] : -Infinity;
+    const maxValue = typeof clip[1] === 'number' ? clip[1] : Infinity;
+    return [minValue, maxValue];
+  }
+}
+
 // Legacy aliases for config compatibility.
 export class ProjectedGravity extends ProjectedGravityB { }
 export class JointPositions extends JointPos { }
@@ -912,4 +1028,5 @@ export const Observations = {
   GeneratedCommandsObservation,
   ImpedanceCommand,
   JointPosCosSin,
+  BuiltinSensor,
 };

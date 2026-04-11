@@ -5,17 +5,12 @@ import sys
 from pathlib import Path
 
 
-def _run_script(script_path: str) -> None:
-    """Run a script."""
+def _run_module(module_path: str) -> None:
+    """Run a module with ``python -m``."""
     project_root = Path(__file__).parent.parent.parent
-    script = project_root / script_path
-
-    if not script.exists():
-        print(f"Error: {script} not found", file=sys.stderr)
-        sys.exit(1)
 
     result = subprocess.run(
-        [sys.executable, str(script)],
+        [sys.executable, "-m", module_path],
         check=False,
         cwd=project_root,
     )
@@ -24,22 +19,17 @@ def _run_script(script_path: str) -> None:
 
 def main() -> None:
     """Run examples/demo/main.py"""
-    _run_script("examples/demo/main.py")
+    _run_module("examples.demo.main")
 
 
 def simple() -> None:
     """Run examples/demo/simple.py"""
-    _run_script("examples/demo/simple.py")
-
-
-def splat() -> None:
-    """Run examples/demo/splat.py"""
-    _run_script("examples/demo/splat.py")
+    _run_module("examples.demo.simple")
 
 
 def mjlab() -> None:
     """Run examples/mjlab/defaults.py"""
-    _run_script("examples/mjlab/defaults.py")
+    _run_module("examples.mjlab.defaults")
 
 
 def serve() -> None:
