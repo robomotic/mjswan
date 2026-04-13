@@ -173,11 +173,6 @@ export class DragStateManager {
         }
 
         this.updateRaycaster(x, y);
-        const hit = this.raycaster.ray.origin
-            .clone()
-            .addScaledVector(this.raycaster.ray.direction, this.grabDistance);
-
-        this.currentWorld.copy(hit);
         this.update();
     }
 
@@ -185,6 +180,16 @@ export class DragStateManager {
         if (!this.physicsObject || !this.active) {
             return;
         }
+
+        // Reproject the stored mouse screen position (NDC) using the current camera.
+        // This ensures the arrow endpoint tracks correctly when the camera moves
+        // (e.g. when the viewer is following an object), even if the mouse is still.
+        this.raycaster.setFromCamera(this.mousePos, this.camera);
+        this.currentWorld.copy(
+            this.raycaster.ray.origin
+                .clone()
+                .addScaledVector(this.raycaster.ray.direction, this.grabDistance)
+        );
 
         // Recalculate world position of physicsObject
         this.worldHit.copy(this.localHit);
