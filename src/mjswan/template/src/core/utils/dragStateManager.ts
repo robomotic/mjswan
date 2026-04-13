@@ -172,19 +172,29 @@ export class DragStateManager {
             return;
         }
 
+        // Only record the new mouse position; do NOT call update() here.
+        // update() is driven exclusively by the physics loop (applyDragForces),
+        // which first syncs body positions from mjData before calling update().
+        // Calling update() here too would use a stale (last-rendered) body
+        // position for worldHit, causing the arrow to oscillate between the
+        // physics-synced and render-cached positions on alternate frames.
         this.updateRaycaster(x, y);
-        const hit = this.raycaster.ray.origin
-            .clone()
-            .addScaledVector(this.raycaster.ray.direction, this.grabDistance);
-
-        this.currentWorld.copy(hit);
-        this.update();
     }
 
     update(): void {
         if (!this.physicsObject || !this.active) {
             return;
         }
+
+        // Reproject the stored mouse screen position (NDC) using the current camera.
+        // This ensures the arrow endpoint tracks correctly when the camera moves
+        // (e.g. when the viewer is following an object), even if the mouse is still.
+        this.raycaster.setFromCamera(this.mousePos, this.camera);
+        this.currentWorld.copy(
+            this.raycaster.ray.origin
+                .clone()
+                .addScaledVector(this.raycaster.ray.direction, this.grabDistance)
+        );
 
         // Recalculate world position of physicsObject
         this.worldHit.copy(this.localHit);
