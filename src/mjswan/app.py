@@ -6,6 +6,9 @@ that can be saved to disk or launched in a web browser.
 
 from __future__ import annotations
 
+import csv
+import json
+import os
 from pathlib import Path
 
 
@@ -18,6 +21,11 @@ class mjswanApp:
 
     def __init__(self, app_dir: Path) -> None:
         self._app_dir = app_dir
+
+    @property
+    def app_dir(self) -> Path:
+        """Return the built application directory."""
+        return self._app_dir
 
     def launch(
         self,
@@ -42,6 +50,41 @@ class mjswanApp:
         import webbrowser
 
         directory = str(self._app_dir)
+        joint_log_dir = Path(
+            os.getenv("MJSWAN_JOINT_LOG_DIR", str(self._app_dir / "joint_logs"))
+        ).expanduser()
+        joint_log_endpoint = "/_mjswan/joint-log"
+
+        def _append_joint_snapshot(payload: dict) -> None:
+            joint_log_dir.mkdir(parents=True, exist_ok=True)
+
+            timestamp = str(payload.get("timestamp", ""))
+            snapshot = payload.get("snapshot", [])
+            if not isinstance(snapshot, list) or not snapshot:
+                return
+
+            joint_names = [str(row.get("joint", "")) for row in snapshot]
+            leader_row = {"timestamp": timestamp}
+            follower_row = {"timestamp": timestamp}
+            for row in snapshot:
+                joint = str(row.get("joint", ""))
+                if not joint:
+                    continue
+                leader_row[joint] = row.get("leader", "")
+                follower_row[joint] = row.get("follower", "")
+
+            files = [
+                (joint_log_dir / "leader_joint_values.csv", leader_row),
+                (joint_log_dir / "follower_joint_values.csv", follower_row),
+            ]
+            fieldnames = ["timestamp", *joint_names]
+            for path, row in files:
+                write_header = not path.exists() or path.stat().st_size == 0
+                with path.open("a", newline="", encoding="utf-8") as handle:
+                    writer = csv.DictWriter(handle, fieldnames=fieldnames)
+                    if write_header:
+                        writer.writeheader()
+                    writer.writerow(row)
 
         class CrossOriginIsolatedHandler(http.server.SimpleHTTPRequestHandler):
             """HTTP handler with Cross-Origin Isolation headers for SharedArrayBuffer."""
@@ -54,6 +97,32 @@ class mjswanApp:
                 self.send_header("Cross-Origin-Opener-Policy", "same-origin")
                 self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
                 super().end_headers()
+
+            def do_POST(self):
+                if self.path.rstrip("/") != joint_log_endpoint:
+                    self.send_error(404, "Unknown POST endpoint")
+                    return
+
+                if os.getenv("MJSWAN_JOINT_LOGGING", "0") != "1":
+                    self.send_error(403, "Joint logging is disabled")
+                    return
+
+                try:
+                    content_length = int(self.headers.get("Content-Length", "0"))
+                except ValueError:
+                    self.send_error(400, "Invalid Content-Length")
+                    return
+
+                raw = self.rfile.read(content_length)
+                try:
+                    payload = json.loads(raw.decode("utf-8") or "{}")
+                except json.JSONDecodeError:
+                    self.send_error(400, "Invalid JSON payload")
+                    return
+
+                _append_joint_snapshot(payload)
+                self.send_response(204)
+                self.end_headers()
 
         handler = CrossOriginIsolatedHandler
 

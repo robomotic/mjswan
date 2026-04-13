@@ -105,6 +105,11 @@ export class mjswanRuntime {
   private policyStateBuilder: PolicyStateBuilder | null;
   private policyConfigPath: string | null;
   private policyDebugCounter: number;
+  private jointDebugOverlay: HTMLPreElement | null;
+  private lastJointDebugLogTime: number;
+  private jointLoggingEnabled: boolean;
+  private jointLoggingEndpoint: string | null;
+  private jointLoggingIntervalMs: number;
   private policyControl: Array<{
     controlType: string;
     ctrlAdr: number[];
@@ -173,6 +178,9 @@ export class mjswanRuntime {
     this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
+    if (!this.container.style.position) {
+      this.container.style.position = 'relative';
+    }
     this.container.appendChild(this.renderer.domElement);
 
     this.vrButton = null;
@@ -224,6 +232,28 @@ export class mjswanRuntime {
     this.policyStateBuilder = null;
     this.policyConfigPath = null;
     this.policyDebugCounter = 0;
+    this.jointDebugOverlay = document.createElement('pre');
+    Object.assign(this.jointDebugOverlay.style, {
+      position: 'absolute',
+      top: '12px',
+      right: '12px',
+      zIndex: '20',
+      margin: '0',
+      padding: '8px 10px',
+      borderRadius: '8px',
+      background: 'rgba(5, 10, 20, 0.78)',
+      color: '#d7f5dd',
+      font: '12px/1.4 monospace',
+      whiteSpace: 'pre',
+      pointerEvents: 'none',
+      display: 'none',
+      maxWidth: '42ch',
+    });
+    this.container.appendChild(this.jointDebugOverlay);
+    this.lastJointDebugLogTime = 0;
+    this.jointLoggingEnabled = false;
+    this.jointLoggingEndpoint = null;
+    this.jointLoggingIntervalMs = 1000;
     this.policyControl = null;
     this.onnxModule = null;
     this.onnxInputDict = null;
@@ -257,6 +287,7 @@ export class mjswanRuntime {
       this.eventManager = null;
     }
     await this.stop();
+    await this.loadJointLoggingConfig();
 
     // Dispose previous splat/collider before switching scenes
     if (this.splatMesh) {
@@ -505,7 +536,10 @@ export class mjswanRuntime {
         if (this.policyRunner && this.policyStateBuilder) {
           const state = this.policyStateBuilder.build();
           const obs = this.policyRunner.collectObservationsByKey(state);
-          await this.runOnnxInference(obs);
+          const handledByBuiltIn = this.applyBuiltInPolicyFallback(obs);
+          if (!handledByBuiltIn) {
+            await this.runOnnxInference(obs);
+          }
           if (this.policyDebugCounter % 60 === 0) {
             const debugKey =
               'policy' in obs
@@ -525,6 +559,7 @@ export class mjswanRuntime {
         }
         this.executeSimulationSteps();
         this.updateCachedState();
+        this.updateJointDebugSnapshot();
 
         // Evaluate termination conditions after simulation step
         if (this.terminationManager && this.policyStateBuilder) {
@@ -630,6 +665,29 @@ export class mjswanRuntime {
       const state = this.policyStateBuilder.build();
       this.policyRunner.reset(state);
       this.policyControl = this.buildPolicyControl(config, runner, this.policyStateBuilder);
+
+      // Seed lastActions with the policy default positions so that position-controlled
+      // joints hold at their intended default during the ONNX model loading window.
+      // Without this, ctrl.fill(0) zeros out every actuator each step, causing position
+      // actuators to target qpos=0 and motor actuators to receive zero torque — producing
+      // a visible mismatch between leader (falls under gravity) and follower (forced to 0).
+      if (this.policyControl) {
+        const defaults = runner.getDefaultJointPos();
+        const initActions = new Float32Array(runner.getNumActions());
+        for (const term of this.policyControl) {
+          if (term.controlType === 'joint_position') {
+            for (let i = 0; i < term.actionIndices.length; i++) {
+              // target = term.defaultJointPos[i] + term.actionOffset[i] + term.actionScale[i] * action
+              // We want target = defaults[actionIndex], so solve for action:
+              const actionIndex = term.actionIndices[i];
+              const scale = term.actionScale[i] !== 0 ? term.actionScale[i] : 1;
+              initActions[actionIndex] = (defaults[actionIndex] - term.defaultJointPos[i] - term.actionOffset[i]) / scale;
+            }
+          }
+          // torque terms stay at 0 (no initial force)
+        }
+        runner.setLastActions(initActions);
+      }
 
       // Initialize termination manager if termination config is present
       if (config.terminations && Object.keys(config.terminations).length > 0) {
@@ -913,6 +971,10 @@ export class mjswanRuntime {
       });
     }
     getCommandManager().resetTerms();
+    // Apply keyframe 0 if defined (sets qpos + ctrl to the resting default pose).
+    if (this.mjModel.nkey > 0) {
+      this.mujoco.mj_resetDataKeyframe(this.mjModel, this.mjData, 0);
+    }
     this.mujoco.mj_forward(this.mjModel, this.mjData);
     this.lastSimState.bodies.clear();
     this.updateCachedState();
@@ -1229,6 +1291,171 @@ export class mjswanRuntime {
     this.renderer.setSize(width, height);
   };
 
+  private updateJointDebugSnapshot(): void {
+    if (!this.mjModel || !this.mjData || !this.jointDebugOverlay) {
+      return;
+    }
+
+    const now = performance.now();
+    if (now - this.lastJointDebugLogTime < this.jointLoggingIntervalMs) {
+      return;
+    }
+
+    const snapshot = this.collectDualArmJointSnapshot();
+    if (!snapshot || snapshot.length === 0) {
+      this.jointDebugOverlay.style.display = 'none';
+      return;
+    }
+
+    this.lastJointDebugLogTime = now;
+    this.jointDebugOverlay.style.display = 'block';
+
+    const lines = [
+      'Dual-arm joint debug (rad, qpos - qpos0)',
+      'joint               lead    follow      Δ',
+    ];
+    for (const row of snapshot) {
+      lines.push(
+        `${row.joint.padEnd(16)} ${row.leader.toFixed(3).padStart(7)} ${row.follower.toFixed(3).padStart(9)} ${row.delta.toFixed(3).padStart(7)}`
+      );
+    }
+    this.jointDebugOverlay.textContent = lines.join('\n');
+
+    console.log(
+      '[JointDebug] dual-arm snapshot',
+      Object.fromEntries(
+        snapshot.map((row) => [
+          row.joint,
+          {
+            leader: Number(row.leader.toFixed(4)),
+            follower: Number(row.follower.toFixed(4)),
+            delta: Number(row.delta.toFixed(4)),
+          },
+        ])
+      )
+    );
+
+    if (this.jointLoggingEnabled) {
+      void this.persistJointSnapshot(snapshot);
+    }
+  }
+
+  private async loadJointLoggingConfig(): Promise<void> {
+    this.jointLoggingEnabled = false;
+    this.jointLoggingEndpoint = null;
+    this.jointLoggingIntervalMs = 1000;
+
+    try {
+      const response = await fetch(this.resolveAssetUrl('joint_logging.json'), {
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        return;
+      }
+      const payload = await response.json() as {
+        enabled?: boolean;
+        endpoint?: string;
+        interval_seconds?: number;
+      };
+      this.jointLoggingEnabled = Boolean(payload.enabled);
+      this.jointLoggingEndpoint = typeof payload.endpoint === 'string'
+        ? payload.endpoint
+        : '/_mjswan/joint-log';
+      if (typeof payload.interval_seconds === 'number' && payload.interval_seconds > 0) {
+        this.jointLoggingIntervalMs = Math.round(payload.interval_seconds * 1000);
+      }
+    } catch (error) {
+      console.warn('[JointDebug] Failed to load joint_logging.json:', error);
+    }
+  }
+
+  private async persistJointSnapshot(snapshot: Array<{
+    joint: string;
+    leader: number;
+    follower: number;
+    delta: number;
+  }>): Promise<void> {
+    if (!this.jointLoggingEnabled || !this.jointLoggingEndpoint) {
+      return;
+    }
+
+    try {
+      const response = await fetch(this.resolveAssetUrl(this.jointLoggingEndpoint), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          timestamp: new Date().toISOString(),
+          snapshot,
+        }),
+      });
+      if (!response.ok) {
+        console.warn('[JointDebug] Failed to persist joint snapshot:', response.status);
+      }
+    } catch (error) {
+      console.warn('[JointDebug] Error while persisting joint snapshot:', error);
+    }
+  }
+
+  private collectDualArmJointSnapshot(): Array<{
+    joint: string;
+    leader: number;
+    follower: number;
+    delta: number;
+  }> | null {
+    if (!this.mjModel || !this.mjData) {
+      return null;
+    }
+
+    const leaderMap = this.buildJointDebugMap('leader');
+    const followerMap = this.buildJointDebugMap('follower');
+    if (leaderMap.size === 0 || followerMap.size === 0) {
+      return null;
+    }
+
+    const rows: Array<{ joint: string; leader: number; follower: number; delta: number }> = [];
+    for (const [joint, leaderAdr] of leaderMap.entries()) {
+      const followerAdr = followerMap.get(joint);
+      if (followerAdr === undefined) {
+        continue;
+      }
+      const leader = this.mjData.qpos[leaderAdr] - this.mjModel.qpos0[leaderAdr];
+      const follower = this.mjData.qpos[followerAdr] - this.mjModel.qpos0[followerAdr];
+      rows.push({
+        joint,
+        leader,
+        follower,
+        delta: follower - leader,
+      });
+    }
+    return rows;
+  }
+
+  private buildJointDebugMap(prefix: string): Map<string, number> {
+    if (!this.mjModel) {
+      return new Map();
+    }
+
+    const namesArray = new Uint8Array(this.mjModel.names);
+    const decoder = new TextDecoder();
+    const result = new Map<string, number>();
+
+    for (let i = 0; i < this.mjModel.njnt; i++) {
+      let start = this.mjModel.name_jntadr[i];
+      let end = start;
+      while (end < namesArray.length && namesArray[end] !== 0) {
+        end++;
+      }
+      const name = decoder.decode(namesArray.subarray(start, end));
+      if (name.startsWith(`${prefix}/`)) {
+        result.set(name.slice(prefix.length + 1), this.mjModel.jnt_qposadr[i]);
+      }
+    }
+
+    return result;
+  }
+
   dispose(): void {
     this.stop();
     this.policyRunner = null;
@@ -1262,6 +1489,11 @@ export class mjswanRuntime {
     if (this.renderer.domElement.parentElement) {
       this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
     }
+
+    if (this.jointDebugOverlay?.parentElement) {
+      this.jointDebugOverlay.parentElement.removeChild(this.jointDebugOverlay);
+    }
+    this.jointDebugOverlay = null;
 
     if (this.vrButton?.parentElement) {
       this.vrButton.parentElement.removeChild(this.vrButton);
@@ -1440,5 +1672,52 @@ export class mjswanRuntime {
       totalScenes: metrics.totalScenes,
       totalMemoryMB: metrics.totalMemoryBytes / 1048576,
     });
+  }
+
+  private applyBuiltInPolicyFallback(obs: Record<string, Float32Array>): boolean {
+    // Built-in Hold On mode path: derive actions directly from
+    // the policy observation vector [leader_qpos(6), leader_qvel(6), held_qpos(6), is_held(1)].
+    // This mirrors the ONNX model behavior and avoids freezes if inference fails.
+    if (!this.policyRunner || !this.policyControl) {
+      return false;
+    }
+
+    const obsVec = obs.policy ?? obs.observation ?? (Object.keys(obs).length > 0 ? obs[Object.keys(obs)[0]] : null);
+    if (!obsVec) {
+      return false;
+    }
+
+    const expectedActions = this.policyRunner.getNumActions();
+    if (obsVec.length !== 19 || expectedActions !== 12) {
+      return false;
+    }
+
+    const torqueTerm = this.policyControl.find((term) => term.controlType === 'torque' && term.actionIndices.length === 6);
+    const positionTerm = this.policyControl.find((term) => term.controlType === 'joint_position' && term.actionIndices.length === 6);
+    if (!torqueTerm || !positionTerm) {
+      return false;
+    }
+
+    const action = this.policyRunner.getLastActions();
+    const isHeld = obsVec[18] ?? 1;
+
+    for (let i = 0; i < 6; i++) {
+      const leaderQpos = obsVec[i] ?? 0;
+      const leaderQvel = obsVec[6 + i] ?? 0;
+      const heldQpos = obsVec[12 + i] ?? leaderQpos;
+
+      const torqueIdx = torqueTerm.actionIndices[i];
+      const torqueScale = torqueTerm.actionScale[i] !== 0 ? torqueTerm.actionScale[i] : 1;
+      const pdTorque = isHeld * (torqueTerm.kp[i] * (heldQpos - leaderQpos) - torqueTerm.kd[i] * leaderQvel);
+      action[torqueIdx] = pdTorque / torqueScale;
+
+      const followerIdx = positionTerm.actionIndices[i];
+      const posScale = positionTerm.actionScale[i] !== 0 ? positionTerm.actionScale[i] : 1;
+      action[followerIdx] =
+        (leaderQpos - positionTerm.defaultJointPos[i] - positionTerm.actionOffset[i]) / posScale;
+    }
+
+    this.policyRunner.setLastActions(action);
+    return true;
   }
 }

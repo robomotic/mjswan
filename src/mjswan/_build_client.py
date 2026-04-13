@@ -93,6 +93,19 @@ class ClientBuilder:
         except Exception as e:
             raise RuntimeError(f"Failed to create Node.js environment: {e}")
 
+    def _build_node_env(self, env: dict[str, str] | None = None) -> dict[str, str]:
+        """Return an environment that can resolve the local nodeenv binaries."""
+        build_env = os.environ.copy()
+        node_bin_dir = str(self._get_node_bin().parent)
+        build_env["PATH"] = (
+            f"{node_bin_dir}{os.pathsep}{build_env.get('PATH', '')}"
+            if build_env.get("PATH")
+            else node_bin_dir
+        )
+        if env:
+            build_env.update(env)
+        return build_env
+
     def install_dependencies(self, clean: bool = False) -> None:
         npm_bin = self._get_npm_bin()
         package_lock = self.project_dir / "package-lock.json"
@@ -107,7 +120,11 @@ class ClientBuilder:
                 shutil.rmtree(node_modules)
 
         print("Installing npm dependencies (npm install)...")
-        subprocess.check_call([str(npm_bin), "install"], cwd=self.project_dir)
+        subprocess.check_call(
+            [str(npm_bin), "install"],
+            cwd=self.project_dir,
+            env=self._build_node_env(),
+        )
 
     def sync_version_from_python(self) -> None:
         """Sync package.json version with Python package __version__."""
@@ -140,13 +157,10 @@ class ClientBuilder:
                 f"Available scripts: {list(package_data.get('scripts', {}).keys())}"
             )
         print(f"Running npm script: {script_name}")
-        build_env = os.environ.copy()
-        if env:
-            build_env.update(env)
         subprocess.check_call(
             [str(npm_bin), "run", script_name],
             cwd=self.project_dir,
-            env=build_env,
+            env=self._build_node_env(env),
         )
 
     def generate_custom_observations(self) -> None:

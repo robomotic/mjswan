@@ -4,6 +4,8 @@ A basic example demonstrating how to use mjswan to create a viewer application
 with multiple robot scenes, including a dual-arm SO101 leader/follower setup.
 """
 
+import argparse
+import json
 import os
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -15,6 +17,7 @@ from mjlab.envs.mdp import observations as obs_fns
 from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 
 import mjswan
+from mjswan.app import mjswanApp
 from mjswan.envs.mdp.actions import JointPositionActionCfg, JointEffortActionCfg
 
 @dataclass
@@ -352,37 +355,6 @@ def _build_hold_mode_policy() -> onnx.ModelProto:
     model.ir_version = min(model.ir_version, 10)
     onnx.checker.check_model(model)
     return model
-    """Create a tiny ONNX policy that mirrors leader commands to both arms."""
-    input_size = len(_SO101_JOINT_SPECS)
-    output_size = len(_SO101_POLICY_JOINT_NAMES)
-    input_info = onnx.helper.make_tensor_value_info(
-        "policy", onnx.TensorProto.FLOAT, [1, input_size]
-    )
-    output_info = onnx.helper.make_tensor_value_info(
-        "action", onnx.TensorProto.FLOAT, [1, output_size]
-    )
-    graph = onnx.helper.make_graph(
-        nodes=[
-            onnx.helper.make_node(
-                "Concat",
-                inputs=["policy", "policy"],
-                outputs=["action"],
-                axis=1,
-            )
-        ],
-        name="so101_leader_follower_mirror",
-        inputs=[input_info],
-        outputs=[output_info],
-    )
-    model = onnx.helper.make_model(
-        graph,
-        producer_name="mjswan",
-        opset_imports=[onnx.helper.make_operatorsetid("", 13)],
-    )
-    model.ir_version = min(model.ir_version, 10)
-    onnx.checker.check_model(model)
-    return model
-
 
 def _add_so101_scene(project) -> None:
     """Add a dual-arm SO101 scene where the follower copies the leader joints."""
@@ -473,6 +445,8 @@ def _add_so101_scene(project) -> None:
             ),
             "follower_tracking": JointPositionActionCfg(
                 actuator_names=tuple(_SO101_FOLLOWER_JOINT_NAMES),
+                # The policy already outputs absolute leader qpos, so do not
+                # add the default joint offsets again on the follower side.
                 use_default_offset=False,
             ),
         },
@@ -525,6 +499,8 @@ def _add_so101_scene(project) -> None:
             ),
             "follower_joint_pos": JointPositionActionCfg(
                 actuator_names=tuple(_SO101_FOLLOWER_JOINT_NAMES),
+                # The hold-mode policy emits absolute leader qpos for the
+                # follower targets, so keep the action in absolute coordinates.
                 use_default_offset=False,
             ),
         },
@@ -621,7 +597,49 @@ def setup_builder() -> mjswan.Builder:
     return builder
 
 
-def main():
+def _parse_bool_arg(value: str | bool) -> bool:
+    """Parse a flexible CLI boolean value."""
+    if isinstance(value, bool):
+        return value
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "t", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "f", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(
+        f"Invalid boolean value: {value!r}. Use true/false."
+    )
+
+
+def _configure_joint_logging(app: mjswanApp, *, enabled: bool, log_dir: str) -> None:
+    """Write the runtime logging config and prepare the output CSV locations."""
+    app_dir = app.app_dir
+    config_path = app_dir / "joint_logging.json"
+    endpoint = "/_mjswan/joint-log"
+
+    payload = {
+        "enabled": enabled,
+        "endpoint": endpoint,
+        "interval_seconds": 1.0,
+    }
+    config_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    if not enabled:
+        os.environ["MJSWAN_JOINT_LOGGING"] = "0"
+        os.environ.pop("MJSWAN_JOINT_LOG_DIR", None)
+        return
+
+    resolved_log_dir = Path(log_dir).expanduser().resolve()
+    resolved_log_dir.mkdir(parents=True, exist_ok=True)
+    for name in ("leader_joint_values.csv", "follower_joint_values.csv"):
+        (resolved_log_dir / name).write_text("", encoding="utf-8")
+
+    os.environ["MJSWAN_JOINT_LOGGING"] = "1"
+    os.environ["MJSWAN_JOINT_LOG_DIR"] = str(resolved_log_dir)
+    print(f"Joint logging enabled. CSV files will be written to: {resolved_log_dir}")
+
+
+def main(argv: list[str] | None = None):
     """Main entry point for the simple demo.
 
     Sets up the builder, builds the application, and launches it in a browser.
@@ -630,9 +648,26 @@ def main():
         MJSWAN_BASE_PATH: Base path for deployment (default: '/')
         MJSWAN_NO_LAUNCH: Set to '1' to skip launching the browser
     """
+    parser = argparse.ArgumentParser(description="Run the mjswan simple demo.")
+    parser.add_argument(
+        "--logging",
+        type=_parse_bool_arg,
+        nargs="?",
+        const=True,
+        default=False,
+        help="Enable leader/follower joint CSV logging (default: false).",
+    )
+    parser.add_argument(
+        "--log-dir",
+        default="joint_logs",
+        help="Directory for the generated joint CSV files when --logging true.",
+    )
+    args = parser.parse_args(argv)
+
     builder = setup_builder()
     # Build and launch the application
     app = builder.build()
+    _configure_joint_logging(app, enabled=args.logging, log_dir=args.log_dir)
     if os.getenv("MJSWAN_NO_LAUNCH") == "1":
         return
     app.launch()

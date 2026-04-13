@@ -5,7 +5,7 @@ import type {
 
 export class HoldOnCommand implements CommandTerm {
   private output: Float32Array;
-  private isHeld: boolean = false;
+  private isHeld: boolean = true;
   private heldQpos: Float32Array;
   private qposAdrs: number[] = [];
 
@@ -22,29 +22,36 @@ export class HoldOnCommand implements CommandTerm {
       this.qposAdrs = jointNames.map(name => this.resolveJointQposAdr(context.mjModel, name));
     }
 
-    window.addEventListener("keydown", this.handleKeyDown);
-    window.addEventListener("keyup", this.handleKeyUp);
+    // Capture the initial joint positions
+    this.latchCurrentPositions();
+
+    window.addEventListener("pointerdown", this.handlePointerDown);
+    window.addEventListener("pointerup", this.handlePointerUp);
+    window.addEventListener("pointercancel", this.handlePointerUp);
   }
 
-  private handleKeyDown = (e: KeyboardEvent) => {
-    if (e.code === "Space" && !this.isHeld) {
-      e.preventDefault();
-      this.isHeld = true;
-      if (this.context.mjData) {
-        for (let i = 0; i < this.qposAdrs.length; i++) {
-          const adr = this.qposAdrs[i];
-          if (adr >= 0) {
-            this.heldQpos[i] = this.context.mjData.qpos[adr];
-          }
+  private latchCurrentPositions() {
+    if (this.context.mjData) {
+      for (let i = 0; i < this.qposAdrs.length; i++) {
+        const adr = this.qposAdrs[i];
+        if (adr >= 0) {
+          // Keep held positions in absolute qpos coordinates so they match
+          // the hold-mode policy observations in `simple.py`.
+          this.heldQpos[i] = this.context.mjData.qpos[adr];
         }
       }
     }
+  }
+
+  private handlePointerDown = (e: PointerEvent) => {
+    // When the mouse/pointer is pressed, release the hold so forces can apply
+    this.isHeld = false;
   };
 
-  private handleKeyUp = (e: KeyboardEvent) => {
-    if (e.code === "Space") {
-      this.isHeld = false;
-    }
+  private handlePointerUp = (e: PointerEvent) => {
+    // When the mouse/pointer is released, latch the current positions and hold them
+    this.isHeld = true;
+    this.latchCurrentPositions();
   };
 
   private resolveJointQposAdr(mjModel: any, jointName: string): number {
@@ -82,7 +89,8 @@ export class HoldOnCommand implements CommandTerm {
   }
 
   dispose() {
-    window.removeEventListener("keydown", this.handleKeyDown);
-    window.removeEventListener("keyup", this.handleKeyUp);
+    window.removeEventListener("pointerdown", this.handlePointerDown);
+    window.removeEventListener("pointerup", this.handlePointerUp);
+    window.removeEventListener("pointercancel", this.handlePointerUp);
   }
 }

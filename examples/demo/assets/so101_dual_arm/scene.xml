@@ -264,4 +264,12 @@
     <position class="sts3215" name="follower/wrist_flex" joint="follower/wrist_flex" forcerange="-3.35 3.35" ctrlrange="-1.65806 1.65806" />
     <position class="sts3215" name="follower/wrist_roll" joint="follower/wrist_roll" forcerange="-3.35 3.35" ctrlrange="-2.74385 2.84121" />
     <position class="sts3215" name="follower/gripper" joint="follower/gripper" forcerange="-3.35 3.35" ctrlrange="-0.17453 1.74533" />
-  </actuator><equality /></mujoco>
+  </actuator><equality />
+  <!-- Default resting pose: shoulder_pan=0, shoulder_lift=0.25, elbow_flex=0.65,
+       wrist_flex=-0.35, wrist_roll=0, gripper=0.6 (same for leader and follower) -->
+  <keyframe>
+    <key name="default"
+         qpos="0 0.25 0.65 -0.35 0 0.6  0 0.25 0.65 -0.35 0 0.6"
+         ctrl="0 0 0 0 0 0  0 0.25 0.65 -0.35 0 0.6"/>
+  </keyframe>
+</mujoco>
