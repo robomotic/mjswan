@@ -172,8 +172,13 @@ export class DragStateManager {
             return;
         }
 
+        // Only record the new mouse position; do NOT call update() here.
+        // update() is driven exclusively by the physics loop (applyDragForces),
+        // which first syncs body positions from mjData before calling update().
+        // Calling update() here too would use a stale (last-rendered) body
+        // position for worldHit, causing the arrow to oscillate between the
+        // physics-synced and render-cached positions on alternate frames.
         this.updateRaycaster(x, y);
-        this.update();
     }
 
     update(): void {
