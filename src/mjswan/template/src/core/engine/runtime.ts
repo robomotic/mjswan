@@ -1675,6 +1675,8 @@ export class mjswanRuntime {
   }
 
   private applyBuiltInPolicyFallback(obs: Record<string, Float32Array>): boolean {
+      // Debug: log when fallback is triggered and what values are set
+      let debugFollower = [];
     // Built-in Hold On mode path: derive actions directly from
     // the policy observation vector [leader_qpos(6), leader_qvel(6), held_qpos(6), is_held(1)].
     // This mirrors the ONNX model behavior and avoids freezes if inference fails.
@@ -1701,6 +1703,7 @@ export class mjswanRuntime {
     const action = this.policyRunner.getLastActions();
     const isHeld = obsVec[18] ?? 1;
 
+    // Leader PD hold (unchanged)
     for (let i = 0; i < 6; i++) {
       const leaderQpos = obsVec[i] ?? 0;
       const leaderQvel = obsVec[6 + i] ?? 0;
@@ -1710,11 +1713,20 @@ export class mjswanRuntime {
       const torqueScale = torqueTerm.actionScale[i] !== 0 ? torqueTerm.actionScale[i] : 1;
       const pdTorque = isHeld * (torqueTerm.kp[i] * (heldQpos - leaderQpos) - torqueTerm.kd[i] * leaderQvel);
       action[torqueIdx] = pdTorque / torqueScale;
+    }
 
+    // Follower: always mirror leader qpos (absolute)
+    for (let i = 0; i < 6; i++) {
+      const leaderQpos = obsVec[i] ?? 0;
       const followerIdx = positionTerm.actionIndices[i];
       const posScale = positionTerm.actionScale[i] !== 0 ? positionTerm.actionScale[i] : 1;
-      action[followerIdx] =
-        (leaderQpos - positionTerm.defaultJointPos[i] - positionTerm.actionOffset[i]) / posScale;
+      const val = (leaderQpos - positionTerm.defaultJointPos[i] - positionTerm.actionOffset[i]) / posScale;
+      action[followerIdx] = val;
+      debugFollower.push(val);
+    }
+
+    if (typeof window !== 'undefined' && window.console) {
+      console.log('[HoldOnFallback] Follower set to:', debugFollower);
     }
 
     this.policyRunner.setLastActions(action);
