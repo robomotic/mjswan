@@ -64,7 +64,7 @@ dev = [
     "pytest>=9.0.2",
 ]
 examples = [
-    "mjlab @ git+https://github.com/mujocolab/mjlab.git",
+    "mjlab>=1.3.0",
     "torch>=2.9.1",
     "robot-descriptions>=1.22.0",
     "playground>=0.1.0",
