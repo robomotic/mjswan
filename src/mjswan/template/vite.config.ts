@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
 import path from 'path';
@@ -19,6 +19,47 @@ function getVersionFromPython(): string {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const pkg = require('./package.json');
   return pkg.version || '0.0.0';
+}
+
+const isMt = process.env.MJSWAN_MT === '1';
+const coiSwPath = path.resolve(__dirname, '_mt/coi-serviceworker.js');
+
+function mtPlugin(enabled: boolean): Plugin | null {
+  if (!enabled) return null;
+  return {
+    name: 'mjswan-mt',
+    configureServer(server) {
+      // Serve the SW file during `vite dev` so the browser can register it.
+      server.middlewares.use('/coi-serviceworker.js', (_req, res) => {
+        res.setHeader('Content-Type', 'application/javascript');
+        res.end(fs.readFileSync(coiSwPath, 'utf-8'));
+      });
+    },
+    generateBundle() {
+      // Emit the SW file only when building the mt variant.
+      this.emitFile({
+        type: 'asset',
+        fileName: 'coi-serviceworker.js',
+        source: fs.readFileSync(coiSwPath, 'utf-8'),
+      });
+    },
+    transformIndexHtml(html: string) {
+      // Register the COOP/COEP service worker early in <head>.
+      // Required for GitHub Pages hosting (cannot set response headers).
+      // On Netlify / Cloudflare Pages / Vercel the _headers file is used instead.
+      const swScript =
+        `<script>\n` +
+        `    /* Register COOP/COEP service worker — required for GitHub Pages hosting */\n` +
+        `    if (!window.crossOriginIsolated && 'serviceWorker' in navigator) {\n` +
+        `      document.documentElement.style.display = 'none';\n` +
+        `      navigator.serviceWorker.register('coi-serviceworker.js').then(function() {\n` +
+        `        window.location.reload();\n` +
+        `      });\n` +
+        `    }\n` +
+        `  </script>`;
+      return html.replace('<meta charset="utf-8" />', `<meta charset="utf-8" />\n  ${swScript}`);
+    },
+  };
 }
 
 function gtmPlugin(gtmId: string | undefined) {
@@ -47,10 +88,11 @@ function gtmPlugin(gtmId: string | undefined) {
 }
 
 export default defineConfig({
-  plugins: [react(), vanillaExtractPlugin(), gtmPlugin(process.env.MJSWAN_GTM_ID)],
+  plugins: [react(), vanillaExtractPlugin(), mtPlugin(isMt), gtmPlugin(process.env.MJSWAN_GTM_ID)],
   base: process.env.MJSWAN_BASE_PATH || '/',
   define: {
     __APP_VERSION__: JSON.stringify(getVersionFromPython()),
+    __MUJOCO_MT__: JSON.stringify(isMt),
   },
   resolve: {
     alias: {
@@ -58,12 +100,16 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    exclude: ['mujoco'],
+    exclude: ['mujoco', 'mujoco/mt'],
   },
   assetsInclude: ['**/*.wasm'],
   server: {
     port: 8000,
     host: true,
+    headers: isMt ? {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    } : {},
   },
   build: {
     outDir: 'dist',

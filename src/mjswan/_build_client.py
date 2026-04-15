@@ -465,7 +465,11 @@ class ClientBuilder:
         output_path.write_text("\n".join(lines))
 
     def build(
-        self, clean: bool = False, base_path: str = "/", gtm_id: str | None = None
+        self,
+        clean: bool = False,
+        base_path: str = "/",
+        gtm_id: str | None = None,
+        mt: bool = False,
     ) -> None:
         try:
             self.create_env(clean=clean)
@@ -479,6 +483,8 @@ class ClientBuilder:
             env: dict[str, str] = {"MJSWAN_BASE_PATH": base_path}
             if gtm_id:
                 env["MJSWAN_GTM_ID"] = gtm_id
+            if mt:
+                env["MJSWAN_MT"] = "1"
             self.run_build_script("build", env=env)
             print("✓ Build completed successfully")
         except subprocess.CalledProcessError as e:
@@ -501,7 +507,11 @@ def ensure_node_env(
 
 
 def build_client(
-    project_dir: Path, clean: bool = False, script: str = "build", base_path: str = "/"
+    project_dir: Path,
+    clean: bool = False,
+    script: str = "build",
+    base_path: str = "/",
+    mt: bool = False,
 ) -> None:
     builder = ClientBuilder(project_dir)
-    builder.build(clean=clean, base_path=base_path)
+    builder.build(clean=clean, base_path=base_path, mt=mt)

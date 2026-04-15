@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { MjModel } from '@mujoco/mujoco';
+import type { MjModel } from 'mujoco';
 import { ObservationBase } from './ObservationBase';
 import type { ObservationConfig } from './ObservationBase';
 import type { PolicyRunner } from '../policy/PolicyRunner';

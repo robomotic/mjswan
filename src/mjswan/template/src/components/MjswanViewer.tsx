@@ -54,7 +54,9 @@ const MjswanViewer = ({
     const init = async () => {
       notify('Loading MuJoCo...');
       if (!mujocoRef.current) {
-        const mujocoModule = await import('mujoco');
+        const mujocoModule = __MUJOCO_MT__
+          ? await import('mujoco/mt')
+          : await import('mujoco');
         mujocoRef.current = await mujocoModule.default();
       }
       if (cancelled) {

@@ -140,9 +140,9 @@ def setup_builder() -> mjswan.Builder:
         name="G1",
     ).set_viewer_config(
         mjswan.ViewerConfig(
-            lookat=(0.0, 0.0, 0.7),
-            distance=3.7,
-            elevation=-13.0,
+            lookat=(0.0, 0.0, 0.0),
+            distance=2.5,
+            elevation=-10.0,
             azimuth=-34.0,
             origin_type=mjswan.ViewerConfig.OriginType.ASSET_BODY,
             body_name="torso_link",

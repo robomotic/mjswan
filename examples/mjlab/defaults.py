@@ -40,7 +40,7 @@ TASK_RUN_ID_MAP: dict[str, str | list[str]] = {
 
 
 def main():
-    builder = mjswan.Builder()
+    builder = mjswan.Builder(mt=True)
     project = builder.add_project(name="mjlab Tasks")
     export_contexts = []
 

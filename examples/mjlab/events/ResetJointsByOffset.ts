@@ -64,7 +64,7 @@ export class ResetJointsByOffset extends EventBase {
     return min + Math.random() * (max - min);
   }
 
-  private resolveJointIndices(mjModel: import('@mujoco/mujoco').MjModel): number[] {
+  private resolveJointIndices(mjModel: import('mujoco').MjModel): number[] {
     if (this.jointIds && this.jointIds.length > 0) {
       return this.jointIds.filter((idx) => idx >= 0 && idx < mjModel.njnt);
     }
@@ -121,7 +121,7 @@ export class ResetJointsByOffset extends EventBase {
     return null;
   }
 
-  private getModelJointNames(mjModel: import('@mujoco/mujoco').MjModel): string[] {
+  private getModelJointNames(mjModel: import('mujoco').MjModel): string[] {
     const namesArray = new Uint8Array(mjModel.names);
     const decoder = new TextDecoder();
     const names: string[] = [];
