@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import type { MjData, MjModel } from '@mujoco/mujoco';
+import type { MjData, MjModel } from 'mujoco';
 import { mjcToThreeCoordinate } from '../scene/coordinate';
 import { VIEWER_CONFIG_DEFAULTS } from './viewer_config_defaults';
 

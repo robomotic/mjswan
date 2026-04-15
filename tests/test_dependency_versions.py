@@ -29,13 +29,32 @@ def _read_python_mujoco_version() -> str:
 
 
 def _read_npm_mujoco_version() -> str:
+    """Extract the MuJoCo version from package.json dependencies.
+
+    Version value may be plain semver ("3.7.0") or an npm alias spec
+    ("npm:@scope/pkg@3.7.0").
+    """
     package_json = json.loads(TEMPLATE_PACKAGE_JSON.read_text())
-    version = package_json.get("dependencies", {}).get("@mujoco/mujoco")
-    if version is None:
+    deps = package_json.get("dependencies", {})
+
+    version_spec: str | None = None
+    for key, value in deps.items():
+        if key == "mujoco" or key.endswith("/mujoco"):
+            version_spec = value
+            break
+
+    if version_spec is None:
         raise AssertionError(
-            f"Could not find npm @mujoco/mujoco dependency in {TEMPLATE_PACKAGE_JSON}"
+            f"Could not find a mujoco npm dependency in {TEMPLATE_PACKAGE_JSON}. "
+            "Expected a key of 'mujoco', '@mujoco/mujoco', '@ttktjmt/mujoco', "
+            "or any '<scope>/mujoco'."
         )
-    return version
+    # npm alias form: "npm:@scope/pkg@X.Y.Z" — extract trailing @version
+    alias_match = re.search(r"@(\d+\.\d+\.\d+[^\"']*)$", version_spec)
+    if alias_match:
+        return alias_match.group(1)
+    # plain semver, strip optional range prefix (^, ~, =)
+    return version_spec.lstrip("^~=")
 
 
 class TestMuJoCoDependencyVersions:
@@ -44,7 +63,7 @@ class TestMuJoCoDependencyVersions:
         npm_version = _read_npm_mujoco_version()
 
         assert python_version == npm_version, (
-            "Python package 'mujoco' and npm package '@mujoco/mujoco' must use the "
+            "Python package 'mujoco' and npm package 'mujoco' must use the "
             "same version. Passing MjModel between Python and the frontend is only "
             "guaranteed to work when both sides use the same MuJoCo version, so "
             f"keeping these versions aligned is strongly recommended "

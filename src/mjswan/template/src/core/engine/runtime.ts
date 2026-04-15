@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
-import type { MainModule, MjData, MjModel } from '@mujoco/mujoco';
+import type { MainModule, MjData, MjModel } from 'mujoco';
 import {
   downloadExampleScenesFolder,
   getPosition,

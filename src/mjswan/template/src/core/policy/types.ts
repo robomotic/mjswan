@@ -1,4 +1,4 @@
-import type { MainModule, MjData, MjModel } from '@mujoco/mujoco';
+import type { MainModule, MjData, MjModel } from 'mujoco';
 import type { Scene } from 'three';
 
 import type { CommandsConfig } from '../command';

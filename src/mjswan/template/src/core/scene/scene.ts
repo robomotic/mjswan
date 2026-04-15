@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { MainModule, MjData, MjModel } from '@mujoco/mujoco';
+import type { MainModule, MjData, MjModel } from 'mujoco';
 import { mujocoAssetCollector } from '../utils/mujocoAssetCollector';
 import { normalizeScenePath } from '../utils/pathUtils';
 import { loadMjzFile } from '../utils/mjzLoader';

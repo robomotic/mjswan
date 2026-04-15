@@ -21,7 +21,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mujoco/mujoco": "3.6.0",
+    "mujoco": "npm:@ttktjmt/mujoco@3.7.0",
     "@mantine/core": "^8.3.0",
     "@mantine/hooks": "^8.3.0",
     "@mantine/vanilla-extract": "^8.3.0",

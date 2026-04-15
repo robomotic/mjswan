@@ -4,8 +4,8 @@ export type EventConfig = {
 };
 
 export type EventContext = {
-  mjModel: import('@mujoco/mujoco').MjModel;
-  mjData: import('@mujoco/mujoco').MjData;
+  mjModel: import('mujoco').MjModel;
+  mjData: import('mujoco').MjData;
   terrainData?: TerrainData | null;
 };
 

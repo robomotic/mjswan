@@ -58,7 +58,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    exclude: ['@mujoco/mujoco'],
+    exclude: ['mujoco'],
   },
   assetsInclude: ['**/*.wasm'],
   server: {
@@ -77,7 +77,7 @@ export default defineConfig({
         // (module, worker_threads) behind runtime environment checks that are never
         // reached in the browser.  Suppress the harmless externalization warnings.
         if (
-          warning.message.includes('@mujoco/mujoco') &&
+          warning.message.includes('mujoco') &&
           warning.message.includes('externalized for browser compatibility')
         ) return;
         warn(warning);

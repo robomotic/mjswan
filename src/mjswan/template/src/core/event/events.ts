@@ -46,7 +46,7 @@ export class ResetRootStateUniform extends EventBase {
     }
   }
 
-  private _findFreeJoint(mjModel: import('@mujoco/mujoco').MjModel): number {
+  private _findFreeJoint(mjModel: import('mujoco').MjModel): number {
     for (let i = 0; i < mjModel.njnt; i++) {
       if (mjModel.jnt_type[i] === 0) return i; // mjJNT_FREE = 0
     }
@@ -124,7 +124,7 @@ export class ResetRootStateFromFlatPatches extends EventBase {
     this._applyYawRotation(mjData.qpos, qposAdr + 3, yaw);
   }
 
-  private _findFreeJoint(mjModel: import('@mujoco/mujoco').MjModel): number {
+  private _findFreeJoint(mjModel: import('mujoco').MjModel): number {
     for (let i = 0; i < mjModel.njnt; i++) {
       if (mjModel.jnt_type[i] === 0) return i;
     }
