@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { MjModel } from '@mujoco/mujoco';
+import type { MjModel } from 'mujoco';
 import type { CommandConfigEntry, CommandTerm, CommandTermContext } from './types';
 import { mjcToThreeCoordinate } from '../scene/coordinate';
 

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { MjData } from '@mujoco/mujoco';
+import type { MjData } from 'mujoco';
 import { ObservationBase } from './ObservationBase';
 import type { ObservationConfig } from './ObservationBase';
 import type { PolicyRunner } from '../policy/PolicyRunner';
@@ -381,7 +381,7 @@ export class HeightScan extends ObservationBase {
     return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
   }
 
-  private getModelBodyNames(mjModel: import('@mujoco/mujoco').MjModel): string[] {
+  private getModelBodyNames(mjModel: import('mujoco').MjModel): string[] {
     const namesArray = new Uint8Array(mjModel.names);
     const decoder = new TextDecoder();
     const names: string[] = [];
@@ -456,7 +456,7 @@ export class HeightScan extends ObservationBase {
   }
 
   private resolveFrameIndex(
-    mjModel: import('@mujoco/mujoco').MjModel,
+    mjModel: import('mujoco').MjModel,
     frameType: FrameType,
     frameRefNameValue: unknown
   ): number {

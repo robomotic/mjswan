@@ -39,16 +39,25 @@ class Builder:
     interactive MuJoCo simulations with ONNX policies. It handles projects, scenes, and policies hierarchically.
     """
 
-    def __init__(self, base_path: str = "/", gtm_id: str | None = None) -> None:
+    def __init__(
+        self,
+        base_path: str = "/",
+        gtm_id: str | None = None,
+        mt: bool = False,
+    ) -> None:
         """Initialize a new Builder instance.
 
         Args:
             base_path: Base path for subdirectory deployment (e.g., '/mjswan/').
             gtm_id: Google Tag Manager ID (e.g., 'GTM-XXXXXXX'). Injects GTM snippet if set.
+            mt: Enable multi-threaded MuJoCo WASM. Requires COOP/COEP headers — these are
+                written as a ``_headers`` file (Netlify/Cloudflare Pages/Vercel) and a
+                service worker (required for GitHub Pages hosting). Defaults to False.
         """
         self._projects: list[ProjectConfig] = []
         self._base_path = base_path
         self._gtm_id = gtm_id
+        self._mt = mt
 
     @classmethod
     def from_mjlab(
@@ -59,6 +68,7 @@ class Builder:
         play: bool = False,
         base_path: str = "/",
         gtm_id: str | None = None,
+        mt: bool = False,
     ) -> Builder:
         """Create a Builder pre-configured with a single mjlab task.
 
@@ -89,7 +99,7 @@ class Builder:
             app = builder.build()
             ```
         """
-        builder = cls(base_path=base_path, gtm_id=gtm_id)
+        builder = cls(base_path=base_path, gtm_id=gtm_id, mt=mt)
         project = builder.add_project(name=project_name)
         project.add_mjlab_scene(task_id, play=play)
         return builder
@@ -251,6 +261,22 @@ class Builder:
         with open(root_config_file, "w") as f:
             json.dump(root_config, f, indent=2)
 
+    def _save_mt_headers(self, output_path: Path) -> None:
+        """Write COOP/COEP response headers needed by multi-threaded MuJoCo.
+
+        Two mechanisms are written so the output works on any static host:
+        - ``_headers``: honored by Netlify, Cloudflare Pages, and Vercel.
+        - ``coi-serviceworker.js`` (emitted by the Vite build only when mt=True): used by the
+          injected inline script for GitHub Pages, which cannot set response headers.
+        """
+        headers_content = (
+            "/*\n"
+            "  Cross-Origin-Opener-Policy: same-origin\n"
+            "  Cross-Origin-Embedder-Policy: require-corp\n"
+            "\n"
+        )
+        (output_path / "_headers").write_text(headers_content)
+
     def _build_splat_config_dict(self, scene: SceneConfig, splat: SplatConfig) -> dict:
         """Build the splat dict for config.json.
 
@@ -308,7 +334,11 @@ class Builder:
             if package_json.exists():
                 print("Building the mjswan application...")
                 builder = ClientBuilder(template_dir)
-                builder.build(base_path=self._base_path, gtm_id=self._gtm_id)
+                builder.build(
+                    base_path=self._base_path,
+                    gtm_id=self._gtm_id,
+                    mt=self._mt,
+                )
 
             # Copy all files from template to output_path
             shutil.copytree(
@@ -373,6 +403,10 @@ class Builder:
 
         # Save root configuration (project metadata and structure)
         self._save_config_json(output_path)
+
+        # Write COOP/COEP headers for multi-threaded MuJoCo (SharedArrayBuffer)
+        if self._mt:
+            self._save_mt_headers(output_path)
 
         # Save MuJoCo models and ONNX policies per project
         max_name_len = max(len(p.name) for p in self._projects)

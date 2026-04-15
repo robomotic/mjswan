@@ -681,6 +681,105 @@ class TestFullBuild:
         assert isinstance(app, mjswan.mjswanApp)
 
 
+# ===========================================================================
+# L1 — mt parameter: _save_mt_headers / no-headers when mt=False
+# ===========================================================================
+class TestMtHeaders:
+    def test_mt_defaults_to_false(self):
+        assert Builder()._mt is False
+
+    def test_mt_true_stored(self):
+        assert Builder(mt=True)._mt is True
+
+    def test_save_mt_headers_creates_headers_file(self, tmp_path):
+        Builder()._save_mt_headers(tmp_path)
+        assert (tmp_path / "_headers").exists()
+
+    def test_save_mt_headers_contains_coop(self, tmp_path):
+        Builder()._save_mt_headers(tmp_path)
+        content = (tmp_path / "_headers").read_text()
+        assert "Cross-Origin-Opener-Policy: same-origin" in content
+
+    def test_save_mt_headers_contains_coep(self, tmp_path):
+        Builder()._save_mt_headers(tmp_path)
+        content = (tmp_path / "_headers").read_text()
+        assert "Cross-Origin-Embedder-Policy: require-corp" in content
+
+    def test_save_mt_headers_applies_wildcard_route(self, tmp_path):
+        Builder()._save_mt_headers(tmp_path)
+        content = (tmp_path / "_headers").read_text()
+        assert content.startswith("/*")
+
+    def test_mt_false_does_not_write_headers(
+        self, tmp_path, minimal_model, monkeypatch
+    ):
+        """_save_web with mt=False must not create _headers."""
+        monkeypatch.setattr("mjswan.builder.ClientBuilder", MagicMock())
+        monkeypatch.setattr("mjswan.builder.shutil.copytree", MagicMock())
+        builder = Builder(mt=False)
+        builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        out = tmp_path / "out"
+        builder._save_web(out)
+        assert not (out / "_headers").exists()
+
+    def test_mt_true_writes_headers(self, tmp_path, minimal_model, monkeypatch):
+        """_save_web with mt=True must create _headers with COOP/COEP content."""
+        monkeypatch.setattr("mjswan.builder.ClientBuilder", MagicMock())
+        monkeypatch.setattr("mjswan.builder.shutil.copytree", MagicMock())
+        builder = Builder(mt=True)
+        builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        out = tmp_path / "out"
+        builder._save_web(out)
+        headers_file = out / "_headers"
+        assert headers_file.exists()
+        content = headers_file.read_text()
+        assert "Cross-Origin-Opener-Policy: same-origin" in content
+        assert "Cross-Origin-Embedder-Policy: require-corp" in content
+
+
+# ===========================================================================
+# L3 slow — full mt=True build (triggers frontend compilation)
+# Run with: pytest -m slow
+# ===========================================================================
+@pytest.mark.slow
+class TestFullBuildMt:
+    def test_mt_false_no_headers_file(self, tmp_path, minimal_model):
+        builder = Builder(mt=False)
+        builder.add_project(name="Test").add_scene(name="Scene", model=minimal_model)
+        builder.build(tmp_path / "out")
+        assert not (tmp_path / "out" / "_headers").exists()
+
+    def test_mt_false_no_coi_serviceworker(self, tmp_path, minimal_model):
+        builder = Builder(mt=False)
+        builder.add_project(name="Test").add_scene(name="Scene", model=minimal_model)
+        builder.build(tmp_path / "out")
+        assert not (tmp_path / "out" / "coi-serviceworker.js").exists()
+
+    def test_mt_true_writes_headers_file(self, tmp_path, minimal_model):
+        builder = Builder(mt=True)
+        builder.add_project(name="Test").add_scene(name="Scene", model=minimal_model)
+        builder.build(tmp_path / "out")
+        headers = tmp_path / "out" / "_headers"
+        assert headers.exists()
+        content = headers.read_text()
+        assert "Cross-Origin-Opener-Policy: same-origin" in content
+        assert "Cross-Origin-Embedder-Policy: require-corp" in content
+
+    def test_mt_true_emits_coi_serviceworker(self, tmp_path, minimal_model):
+        builder = Builder(mt=True)
+        builder.add_project(name="Test").add_scene(name="Scene", model=minimal_model)
+        builder.build(tmp_path / "out")
+        assert (tmp_path / "out" / "coi-serviceworker.js").exists()
+
+    def test_mt_true_injects_sw_script_into_html(self, tmp_path, minimal_model):
+        builder = Builder(mt=True)
+        builder.add_project(name="Test").add_scene(name="Scene", model=minimal_model)
+        builder.build(tmp_path / "out")
+        html = (tmp_path / "out" / "index.html").read_text()
+        assert "coi-serviceworker.js" in html
+        assert "crossOriginIsolated" in html
+
+
 @pytest.mark.slow
 class TestFullBuildGtmId:
     def test_gtm_snippet_injected_into_all_html_files(self, tmp_path, minimal_model):
