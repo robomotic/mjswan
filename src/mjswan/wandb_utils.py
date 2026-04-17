@@ -1,4 +1,4 @@
-"""Utilities for loading ONNX policies from Weights & Biases."""
+"""Utilities for loading policy and motion assets from Weights & Biases."""
 
 from __future__ import annotations
 
@@ -23,6 +23,24 @@ class PtOnnxExportContext:
 
     def close(self) -> None:
         self.env.close()
+
+
+def resolve_wandb_run_path(
+    *,
+    wandb_run_path: str | None = None,
+    run_id: str | None = None,
+    entity: str | None = None,
+    project: str | None = None,
+) -> str:
+    """Resolve either a fully qualified run path or ``run_id`` shorthand."""
+    if wandb_run_path:
+        return wandb_run_path
+    if run_id and entity and project:
+        return f"{entity}/{project}/{run_id}"
+    raise ValueError(
+        "Provide either wandb_run_path='entity/project/run_id' or "
+        "run_id together with entity and project."
+    )
 
 
 def _extract_required_capacity(message: str, name: str) -> int | None:
@@ -182,6 +200,29 @@ def fetch_onnx_from_wandb_run(run_path: str) -> tuple[str, onnx.ModelProto]:
     return name, model
 
 
+def fetch_motion_npz_from_wandb_run(run_path: str) -> tuple[str, bytes]:
+    """Download the ``motion.npz`` artifact used by a W&B run."""
+    import wandb
+
+    api = wandb.Api()
+    run = api.run(run_path)
+    artifact = next((a for a in run.used_artifacts() if a.type == "motions"), None)
+    if artifact is None:
+        raise ValueError(f"No motion artifact found in W&B run: {run_path}")
+
+    artifact_name = artifact.name.split("/")[-1]
+    motion_name = artifact_name.split(":", 1)[0] or "motion"
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(artifact.download(root=tmp_dir))
+        motion_path = root / "motion.npz"
+        if not motion_path.exists():
+            raise ValueError(
+                f"Motion artifact for run '{run_path}' did not contain motion.npz"
+            )
+        return motion_name, motion_path.read_bytes()
+
+
 def fetch_pt_onnx_from_wandb_run(
     run_path: str,
     task_id: str,
@@ -258,6 +299,8 @@ def fetch_pt_onnx_from_wandb_run(
 __all__ = [
     "PtOnnxExportContext",
     "create_pt_onnx_export_context",
+    "fetch_motion_npz_from_wandb_run",
     "fetch_onnx_from_wandb_run",
     "fetch_pt_onnx_from_wandb_run",
+    "resolve_wandb_run_path",
 ]

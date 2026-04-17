@@ -30,6 +30,7 @@ from .envs.mdp.observations import ObsFunc, register_obs_func
 from .envs.mdp.terminations import TermFunc, register_termination_func
 from .managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from .managers.termination_manager import TerminationTermCfg
+from .motion import MotionConfig, MotionHandle
 from .policy import PolicyConfig, PolicyHandle
 from .project import ProjectConfig, ProjectHandle
 from .scene import SceneConfig, SceneHandle
@@ -45,12 +46,14 @@ __all__ = [
     "SceneHandle",
     "SplatHandle",
     "PolicyHandle",
+    "MotionHandle",
     # Configs
     "ProjectConfig",
     "SceneConfig",
     "ViewerConfig",
     "SplatConfig",
     "PolicyConfig",
+    "MotionConfig",
     # Custom observation registry
     "ObsFunc",
     "register_obs_func",

@@ -15,6 +15,7 @@ import pytest
 
 from mjswan.adapters.mjlab_adapter import (
     adapt_actions,
+    adapt_commands,
     adapt_observations,
     adapt_terminations,
 )
@@ -119,6 +120,13 @@ FakeMjlabSceneEntityCfg = _make_mjlab_class(
     },
 )
 
+FakeMjlabMotionCommandCfg = _make_mjlab_class(
+    "MotionCommandCfg",
+    anchor_body_name="torso_link",
+    body_names=("pelvis", "torso_link"),
+    entity_name="robot",
+)
+
 
 # ===================================================================
 # Tests: Observations
@@ -200,6 +208,23 @@ class TestAdaptObservations:
         assert result["policy"].terms["ang"].func.ts_name == "BaseAngularVelocity"
         assert result["critic"].terms["grav"].func.ts_name == "ProjectedGravityB"
 
+    def test_tracking_observation_functions_are_mapped(self):
+        motion_anchor = _make_mjlab_obs_func("motion_anchor_pos_b")
+        body_pos = _make_mjlab_obs_func("robot_body_pos_b")
+        result = adapt_observations(
+            {
+                "policy": FakeMjlabObsGroupCfg(
+                    terms={
+                        "anchor": FakeMjlabObsTermCfg(func=motion_anchor),
+                        "body": FakeMjlabObsTermCfg(func=body_pos),
+                    }
+                )
+            }
+        )
+        assert result is not None
+        assert result["policy"].terms["anchor"].func.ts_name == "MotionAnchorPosB"
+        assert result["policy"].terms["body"].func.ts_name == "RobotBodyPosB"
+
 
 # ===================================================================
 # Tests: Terminations
@@ -258,6 +283,19 @@ class TestAdaptTerminations:
 class TestAdaptActions:
     def test_none_passthrough(self):
         assert adapt_actions(None) is None
+
+
+class TestAdaptCommands:
+    def test_none_passthrough(self):
+        assert adapt_commands(None) is None
+
+    def test_motion_command_cfg_converts_to_tracking_command(self):
+        result = adapt_commands({"motion": FakeMjlabMotionCommandCfg()})
+        assert result is not None
+        command = result["motion"]
+        assert command.term_name == "TrackingCommand"
+        assert command.params["anchor_body_name"] == "torso_link"
+        assert command.params["body_names"] == ["pelvis", "torso_link"]
 
     def test_mjswan_types_unchanged(self):
         from mjswan.envs.mdp.actions import JointPositionActionCfg

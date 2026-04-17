@@ -1,4 +1,5 @@
 import { CustomCommands } from './custom_commands';
+import { TrackingCommand } from './TrackingCommand';
 import type {
   ButtonCommandConfig,
   CommandConfigEntry,
@@ -67,6 +68,7 @@ class UiCommand implements CommandTerm {
 
 const BuiltinCommandTerms: Record<string, CommandTermConstructor> = {
   UiCommand,
+  TrackingCommand,
 };
 
 export class CommandManager {
@@ -159,6 +161,10 @@ export class CommandManager {
   getCommand(groupName: string): Float32Array {
     const term = this.terms.get(groupName);
     return term ? term.getCommand() : new Float32Array(0);
+  }
+
+  getTerm(groupName: string): CommandTerm | undefined {
+    return this.terms.get(groupName);
   }
 
   getVelocityCommand(): Float32Array {

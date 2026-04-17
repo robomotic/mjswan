@@ -14,6 +14,10 @@ interface PolicyConfig {
   metadata: Record<string, unknown>;
   config?: string;
   default?: boolean;
+  motions?: Array<{
+    name: string;
+    default?: boolean;
+  }>;
 }
 
 interface ViewerConfig {
@@ -206,6 +210,21 @@ function pickPolicy(scene: SceneConfig, policyQuery: string | null): string | nu
   return found?.name ?? fallback.name;
 }
 
+function pickMotion(policy: PolicyConfig | null, motionQuery: string | null): string | null {
+  if (!policy?.motions?.length) {
+    return null;
+  }
+  const fallback = policy.motions.find((motion) => motion.default) ?? policy.motions[0];
+  if (!motionQuery) {
+    return fallback.name;
+  }
+  const normalized = motionQuery.trim().toLowerCase();
+  const found =
+    policy.motions.find((motion) => motion.name.toLowerCase() === normalized) ||
+    policy.motions.find((motion) => sanitizeName(motion.name) === normalized);
+  return found?.name ?? fallback.name;
+}
+
 function updateUrlParams(
   projectId: string | null,
   sceneName: string | null,
@@ -236,6 +255,8 @@ function AppContent() {
   const [currentProject, setCurrentProject] = useState<ProjectConfig | null>(null);
   const [currentScene, setCurrentScene] = useState<SceneConfig | null>(null);
   const [selectedPolicy, setSelectedPolicy] = useState<string | null>(null);
+  const [selectedMotion, setSelectedMotion] = useState<string | null>(null);
+  const [showReferenceMotion, setShowReferenceMotion] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSplat, setSelectedSplat] = useState<string | null>(null);
   const [customSplatUrl, setCustomSplatUrl] = useState<string | null>(null);
@@ -271,6 +292,8 @@ function AppContent() {
         setCurrentScene(selectedScene);
         const initialPolicy = selectedScene ? pickPolicy(selectedScene, policyQuery) : null;
         setSelectedPolicy(initialPolicy);
+        const initialPolicyConfig = selectedScene?.policies.find((policy) => policy.name === initialPolicy) ?? null;
+        setSelectedMotion(pickMotion(initialPolicyConfig, null));
       })
       .catch((err) => {
         console.error('Failed to load config:', err);
@@ -302,6 +325,15 @@ function AppContent() {
     const projectDir = currentProject.id ? currentProject.id : 'main';
     return `${projectDir}/assets/${selectedPolicyConfig.config}`.replace(/\/+/g, '/');
   }, [currentProject, selectedPolicyConfig]);
+  const motionOptions = useMemo(() => {
+    if (!selectedPolicyConfig?.motions?.length) {
+      return [] as { value: string; label: string }[];
+    }
+    return selectedPolicyConfig.motions.map((motion) => ({
+      value: motion.name,
+      label: motion.name,
+    }));
+  }, [selectedPolicyConfig]);
 
   // Resolve bundled splat paths to URLs the viewer can fetch.
   // When config.json uses "path" (bundled), convert it to a relative URL.
@@ -368,6 +400,11 @@ function AppContent() {
     runtimeRef.current = runtime;
   }, []);
 
+  useEffect(() => {
+    setSelectedMotion(pickMotion(selectedPolicyConfig, null));
+    setShowReferenceMotion(Boolean(selectedPolicyConfig?.motions?.length));
+  }, [selectedPolicyConfig]);
+
   const splatOptions = useMemo(() => {
     if (!currentScene?.splats?.length) return [] as { value: string; label: string }[];
     return currentScene.splats.map((s) => ({ value: s.name, label: s.name }));
@@ -421,6 +458,8 @@ function AppContent() {
       setCurrentScene(nextScene);
       const nextPolicy = nextScene?.policies?.[0]?.name ?? null;
       setSelectedPolicy(nextPolicy);
+      const nextPolicyConfig = nextScene?.policies.find((policy) => policy.name === nextPolicy) ?? null;
+      setSelectedMotion(pickMotion(nextPolicyConfig, null));
       updateUrlParams(project.id, nextScene?.name ?? null, nextPolicy);
     },
     [config, showLoading]
@@ -439,6 +478,8 @@ function AppContent() {
       setCurrentScene(scene);
       const nextPolicy = pickPolicy(scene, null);
       setSelectedPolicy(nextPolicy);
+      const nextPolicyConfig = scene.policies.find((policy) => policy.name === nextPolicy) ?? null;
+      setSelectedMotion(pickMotion(nextPolicyConfig, null));
       updateUrlParams(currentProject.id, value, nextPolicy);
     },
     [currentProject, showLoading]
@@ -450,10 +491,22 @@ function AppContent() {
         showLoading();
       }
       setSelectedPolicy(value);
+      const nextPolicyConfig = currentScene?.policies.find((policy) => policy.name === value) ?? null;
+      setSelectedMotion(pickMotion(nextPolicyConfig, null));
       updateUrlParams(currentProject?.id ?? null, currentScene?.name ?? null, value);
     },
     [currentProject, currentScene, selectedPolicy, showLoading]
   );
+
+  const handleMotionChange = useCallback((value: string | null) => {
+    setSelectedMotion(value);
+    void runtimeRef.current?.setSelectedMotion(value);
+  }, []);
+
+  const handleShowReferenceChange = useCallback((value: boolean) => {
+    setShowReferenceMotion(value);
+    runtimeRef.current?.setReferenceVisible(value);
+  }, []);
 
   if (error) {
     return (
@@ -494,6 +547,11 @@ function AppContent() {
           policies={policyOptions}
           policyValue={selectedPolicy}
           onPolicyChange={handlePolicyChange}
+          motions={motionOptions}
+          motionValue={selectedMotion}
+          onMotionChange={handleMotionChange}
+          showReferenceMotion={showReferenceMotion}
+          onShowReferenceMotionChange={handleShowReferenceChange}
           commandsEnabled={!!policyConfigPath}
         />
         <MjswanViewer
@@ -504,6 +562,8 @@ function AppContent() {
           cameraConfig={currentScene?.camera}
           eventsConfig={currentScene?.events}
           terrainData={currentScene?.terrainData}
+          selectedMotion={selectedMotion}
+          showReferenceMotion={showReferenceMotion}
           onError={handleViewerError}
           onReady={handleViewerReady}
           onRuntimeReady={handleRuntimeReady}

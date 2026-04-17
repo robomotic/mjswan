@@ -34,6 +34,7 @@ import type { PolicyConfig } from '../policy/types';
 import { TrackingPolicy } from '../policy/modules/TrackingPolicy';
 import { LocomotionPolicy } from '../policy/modules/LocomotionPolicy';
 import { getCommandManager, type CommandTermContext, type CommandsConfig } from '../command';
+import { TrackingCommand } from '../command/TrackingCommand';
 import { EventManager } from '../event/EventManager';
 import { Events } from '../event/events';
 import type { TerrainData } from '../event/EventBase';
@@ -358,6 +359,23 @@ export class mjswanRuntime {
     console.log('[mjswanRuntime] Simulation reset');
   }
 
+  async setSelectedMotion(motionName: string | null): Promise<void> {
+    const term = getCommandManager().getTerm('motion');
+    if (!(term instanceof TrackingCommand)) {
+      return;
+    }
+    await term.setSelectedMotion(motionName);
+    this.resetSimulation();
+  }
+
+  setReferenceVisible(visible: boolean): void {
+    const term = getCommandManager().getTerm('motion');
+    if (!(term instanceof TrackingCommand)) {
+      return;
+    }
+    term.setReferenceVisible(visible);
+  }
+
   async loadScene(scenePath: string): Promise<void> {
     if (this.loadingScene) {
       await this.loadingScene;
@@ -583,6 +601,20 @@ export class mjswanRuntime {
 
     try {
       const { config } = await this.fetchPolicyConfig(policyConfigPath);
+      if (Array.isArray(config.motions)) {
+        config.motions = config.motions.map((motion) => ({
+          ...motion,
+          path: this.resolveAssetUrl(
+            this.resolvePolicyAssetPath(policyConfigPath, motion.path)
+          ),
+        }));
+      }
+      if (config.commands?.motion?.name === 'TrackingCommand' && Array.isArray(config.motions)) {
+        config.commands.motion = {
+          ...config.commands.motion,
+          motions: config.motions,
+        };
+      }
       this.resetSimulationState();
       this.mujoco.mj_forward(this.mjModel, this.mjData);
       this.updateCachedState();
@@ -594,8 +626,19 @@ export class mjswanRuntime {
           mjModel: this.mjModel,
           mjData: this.mjData,
           scene: this.scene,
+          bodies: this.bodies,
+          mujocoRoot: this.mujocoRoot,
         });
         getCommandManager().resetTerms();
+        const motionTerm = getCommandManager().getTerm('motion');
+        if (motionTerm instanceof TrackingCommand) {
+          await motionTerm.setSelectedMotion(
+            config.motions?.find((motion) => motion.default)?.name
+              ?? config.motions?.[0]?.name
+              ?? null
+          );
+          motionTerm.setReferenceVisible(true);
+        }
         this.mujoco.mj_forward(this.mjModel, this.mjData);
         this.updateCachedState();
       }
