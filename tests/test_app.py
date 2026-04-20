@@ -1,4 +1,4 @@
-"""Tests for mjswanApp.launch().
+"""Tests for mjswanApp.
 
 L1 — pure Python, no MuJoCo/ONNX required (safe for pre-commit).
 """
