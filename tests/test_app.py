@@ -13,7 +13,7 @@ import socket as _socket_module
 import socketserver as _socketserver_module
 import webbrowser as _webbrowser_module
 
-from mjswan.app import mjswanApp
+from mjswan.app import _detect_colab, mjswanApp
 
 
 class _MockTCPServer:
@@ -50,6 +50,23 @@ def app_dir(tmp_path: Path) -> Path:
     d = tmp_path / "dist"
     d.mkdir()
     return d
+
+
+class TestDetectColab:
+    def test_returns_false_outside_colab(self):
+        assert _detect_colab() is False
+
+    def test_returns_true_when_google_colab_importable(self, monkeypatch):
+        mock_google_colab = MagicMock()
+        monkeypatch.setitem(sys.modules, "google.colab", mock_google_colab)
+        assert _detect_colab() is True
+
+    def test_returns_false_after_colab_removed(self, monkeypatch):
+        mock_google_colab = MagicMock()
+        monkeypatch.setitem(sys.modules, "google.colab", mock_google_colab)
+        assert _detect_colab() is True
+        monkeypatch.delitem(sys.modules, "google.colab")
+        assert _detect_colab() is False
 
 
 class TestMjswanAppValidation:
@@ -102,12 +119,12 @@ class TestMjswanAppColabMode:
     ):
         mock_open = MagicMock()
         monkeypatch.setattr(_webbrowser_module, "open", mock_open)
-        mjswanApp(app_dir).launch(colab=True)
+        mjswanApp(app_dir).launch()
         mock_open.assert_not_called()
 
     def test_starts_daemon_thread(self, app_dir, mock_colab_output, mock_thread):
         thread_cls, thread_instance = mock_thread
-        mjswanApp(app_dir).launch(colab=True)
+        mjswanApp(app_dir).launch()
         thread_cls.assert_called_once()
         _, kwargs = thread_cls.call_args
         assert kwargs.get("daemon") is True
@@ -116,17 +133,17 @@ class TestMjswanAppColabMode:
     def test_calls_serve_kernel_port_as_iframe(
         self, app_dir, mock_colab_output, mock_thread
     ):
-        mjswanApp(app_dir).launch(colab=True, port=8080)
+        mjswanApp(app_dir).launch(port=8080)
         mock_colab_output.serve_kernel_port_as_iframe.assert_called_once_with(
             8080, height="600"
         )
 
     def test_respects_height_parameter(self, app_dir, mock_colab_output, mock_thread):
-        mjswanApp(app_dir).launch(colab=True, port=8080, height=800)
+        mjswanApp(app_dir).launch(port=8080, height=800)
         mock_colab_output.serve_kernel_port_as_iframe.assert_called_once_with(
             8080, height="800"
         )
 
     def test_returns_immediately(self, app_dir, mock_colab_output, mock_thread):
-        result = mjswanApp(app_dir).launch(colab=True)
+        result = mjswanApp(app_dir).launch()
         assert result is None

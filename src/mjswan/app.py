@@ -9,6 +9,15 @@ from __future__ import annotations
 from pathlib import Path
 
 
+def _detect_colab() -> bool:
+    try:
+        import google.colab  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
 class mjswanApp:
     """A built mjswan application ready to be launched.
 
@@ -25,17 +34,19 @@ class mjswanApp:
         host: str = "localhost",
         port: int = 8080,
         open_browser: bool = True,
-        colab: bool = False,
         height: int = 600,
     ) -> None:
         """Launch the application in a local web server.
 
+        Automatically detects Google Colab and displays the viewer as an
+        inline iframe. Outside Colab, starts a blocking server and optionally
+        opens a browser tab.
+
         Args:
-            host: Host to bind the server to.
+            host: Host to bind the server to (ignored in Colab).
             port: Port to run the server on.
-            open_browser: Whether to automatically open a browser.
-            colab: Run in Google Colab mode.
-            height: Height of the Colab iframe in pixels (only used when ``colab=True``).
+            open_browser: Whether to automatically open a browser (ignored in Colab).
+            height: Height of the Colab iframe in pixels (ignored outside Colab).
         """
         if not self._app_dir.exists():
             raise RuntimeError(f"Application directory {self._app_dir} does not exist.")
@@ -79,7 +90,7 @@ class mjswanApp:
         class _ReusableTCPServer(socketserver.TCPServer):
             allow_reuse_address = True
 
-        if colab:
+        if _detect_colab():
             bind_host = ""
             chosen_port = _find_available_port(bind_host, port)
             if chosen_port != port:
