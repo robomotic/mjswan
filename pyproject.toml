@@ -132,9 +132,6 @@ override-dependencies = [
     "h5py>=3.8.0",
 ]
 
-[tool.uv.sources]
-warp-lang = { index = "nvidia", marker = "sys_platform != 'darwin'" }
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [

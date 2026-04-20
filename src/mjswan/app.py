@@ -25,6 +25,8 @@ class mjswanApp:
         host: str = "localhost",
         port: int = 8080,
         open_browser: bool = True,
+        colab: bool = False,
+        height: int = 600,
     ) -> None:
         """Launch the application in a local web server.
 
@@ -32,6 +34,8 @@ class mjswanApp:
             host: Host to bind the server to.
             port: Port to run the server on.
             open_browser: Whether to automatically open a browser.
+            colab: Run in Google Colab mode.
+            height: Height of the Colab iframe in pixels (only used when ``colab=True``).
         """
         if not self._app_dir.exists():
             raise RuntimeError(f"Application directory {self._app_dir} does not exist.")
@@ -39,7 +43,6 @@ class mjswanApp:
         import http.server
         import socket
         import socketserver
-        import webbrowser
 
         directory = str(self._app_dir)
 
@@ -73,6 +76,33 @@ class mjswanApp:
                         tries += 1
             raise RuntimeError(f"No available port found starting at {start_port}")
 
+        class _ReusableTCPServer(socketserver.TCPServer):
+            allow_reuse_address = True
+
+        if colab:
+            bind_host = ""
+            chosen_port = _find_available_port(bind_host, port)
+            if chosen_port != port:
+                print(f"Port {port} unavailable — using port {chosen_port} instead.")
+            port = chosen_port
+
+            import threading
+
+            def _serve():
+                with _ReusableTCPServer((bind_host, port), handler) as httpd:
+                    httpd.serve_forever()
+
+            thread = threading.Thread(target=_serve, daemon=True)
+            thread.start()
+            print(f"Server running on port {port}")
+
+            from google.colab import output  # type: ignore[import]
+
+            output.serve_kernel_port_as_iframe(port, height=str(height))
+            return
+
+        import webbrowser
+
         chosen_port = _find_available_port(host, port)
         if chosen_port != port:
             print(f"Port {port} unavailable — using port {chosen_port} instead.")
@@ -81,9 +111,6 @@ class mjswanApp:
         print(f"Starting server at http://{host}:{port}")
         if open_browser:
             webbrowser.open(f"http://{host}:{port}")
-
-        class _ReusableTCPServer(socketserver.TCPServer):
-            allow_reuse_address = True
 
         try:
             with _ReusableTCPServer((host, port), handler) as httpd:
