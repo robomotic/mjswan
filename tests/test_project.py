@@ -259,6 +259,87 @@ class TestPolicyHandle:
         assert commands["goal"].term_name == "DummyCommand"
         assert commands["goal"].params["value"] == 1
 
+    def test_add_motion_defaults_dataset_joint_names_from_policy(
+        self, minimal_model, minimal_onnx
+    ):
+        _, policy = self._make_policy(minimal_model, minimal_onnx)
+        policy._config.policy_joint_names = ["joint_a", "joint_b"]
+
+        motion = policy.add_motion(
+            name="Spin Kick",
+            source="motion.npz",
+            anchor_body_name="torso_link",
+            body_names=("pelvis", "torso_link"),
+            default=True,
+        )
+
+        assert isinstance(motion, mjswan.MotionHandle)
+        stored = policy._config.motions[0]
+        assert stored.name == "Spin Kick"
+        assert stored.dataset_joint_names == ["joint_a", "joint_b"]
+        assert stored.default is True
+
+    def test_add_motion_from_wandb_resolves_run_id_shorthand(
+        self, monkeypatch, minimal_model, minimal_onnx
+    ):
+        _, policy = self._make_policy(minimal_model, minimal_onnx)
+        policy._config.policy_joint_names = ["joint_a"]
+
+        called = {}
+
+        def fake_fetch(run_path: str):
+            called["run_path"] = run_path
+            return "artifact_motion", b"npz-bytes"
+
+        monkeypatch.setattr(
+            "mjswan.wandb_utils.fetch_motion_npz_from_wandb_run",
+            fake_fetch,
+        )
+
+        policy.add_motion_from_wandb(
+            run_id="abc123",
+            entity="demo-org",
+            project="tracking",
+            anchor_body_name="torso_link",
+            body_names=("pelvis", "torso_link"),
+        )
+
+        assert called["run_path"] == "demo-org/tracking/abc123"
+        assert policy._config.motions[0].data == b"npz-bytes"
+
+    def test_add_policy_from_wandb_auto_imports_tracking_motion(
+        self, monkeypatch, minimal_model, minimal_onnx
+    ):
+        scene = Builder().add_project(name="P").add_scene(name="S", model=minimal_model)
+
+        class MotionCommandCfg:
+            __module__ = "mjlab.fake"
+
+            def __init__(self):
+                self.anchor_body_name = "torso_link"
+                self.body_names = ("pelvis", "torso_link")
+
+        monkeypatch.setattr(
+            "mjswan.wandb_utils.fetch_onnx_from_wandb_run",
+            lambda run_path: ("policy", minimal_onnx),
+        )
+        monkeypatch.setattr(
+            "mjswan.wandb_utils.fetch_motion_npz_from_wandb_run",
+            lambda run_path: ("motion_asset", b"npz-data"),
+        )
+
+        handles = scene.add_policy_from_wandb(
+            "demo-org/tracking/run1",
+            only_latest=True,
+            commands={"motion": MotionCommandCfg()},
+        )
+
+        assert len(handles) == 1
+        motion = handles[0]._config.motions[0]
+        assert motion.name == "motion_asset"
+        assert motion.anchor_body_name == "torso_link"
+        assert motion.body_names == ("pelvis", "torso_link")
+
     def test_set_metadata_stores_value(self, minimal_model, minimal_onnx):
         builder, policy = self._make_policy(minimal_model, minimal_onnx)
         policy.set_metadata("version", "1.0")

@@ -67,6 +67,14 @@ export type PolicyConfig = {
     };
   };
   commands?: CommandsConfig;
+  motions?: Array<{
+    name: string;
+    path: string;
+    anchor_body_name: string;
+    body_names: string[];
+    dataset_joint_names?: string[];
+    default?: boolean;
+  }>;
   observations?: Record<string, ObservationGroupConfig>;
   actions?: Record<string, ActionConfigEntry>;
   terminations?: Record<string, TerminationConfigEntry>;

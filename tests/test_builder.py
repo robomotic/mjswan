@@ -166,6 +166,23 @@ class TestSaveConfigJson:
         assert policy["name"] == "Policy"
         assert "config" not in policy
 
+    def test_policy_motion_summary_is_included_in_root_config(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(name="Policy", policy=minimal_onnx).add_motion(
+            name="Spin Kick",
+            source="motion.npz",
+            anchor_body_name="torso_link",
+            body_names=("pelvis", "torso_link"),
+            default=True,
+        )
+
+        builder._save_config_json(tmp_path)
+        policy = self._read_config(tmp_path)["projects"][0]["scenes"][0]["policies"][0]
+        assert policy["motions"] == [{"name": "Spin Kick", "default": True}]
+
     def test_multiple_projects_all_present_in_config(self, tmp_path, minimal_model):
         builder = Builder()
         builder.add_project(name="Project A").add_scene(name="S", model=minimal_model)
@@ -343,6 +360,42 @@ class TestSaveWebPolicyJson:
         )
         data = self._policy_json(self._run(builder, tmp_path), "Policy")
         assert data["onnx"]["path"] == "policy.onnx"
+
+    def test_no_config_path_motions_emitted_and_copied(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        motion_file = tmp_path / "spin_kick.npz"
+        motion_file.write_bytes(b"motion-bytes")
+
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            actions={"joint_pos": JointPositionActionCfg(actuator_names=(".*",))},
+        ).add_motion(
+            name="Spin Kick",
+            source=str(motion_file),
+            anchor_body_name="torso_link",
+            body_names=("pelvis", "torso_link"),
+            dataset_joint_names=["joint_a"],
+            default=True,
+        )
+
+        out = self._run(builder, tmp_path)
+        data = self._policy_json(out, "Policy")
+        assert data["motions"] == [
+            {
+                "name": "Spin Kick",
+                "path": "policy_spin_kick.npz",
+                "anchor_body_name": "torso_link",
+                "body_names": ["pelvis", "torso_link"],
+                "dataset_joint_names": ["joint_a"],
+                "default": True,
+            }
+        ]
+        motion_out = out / "main" / "assets" / "s" / "policy_spin_kick.npz"
+        assert motion_out.read_bytes() == b"motion-bytes"
 
     def test_no_config_path_commands_emitted_as_command_terms(
         self, tmp_path, minimal_model, minimal_onnx

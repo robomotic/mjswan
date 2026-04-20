@@ -55,6 +55,8 @@ export interface CommandTermContext {
   mjModel: MjModel | null;
   mjData: MjData | null;
   scene: THREE.Scene;
+  bodies?: Record<number, THREE.Group> | null;
+  mujocoRoot?: THREE.Group | null;
 }
 
 export interface CommandTerm {

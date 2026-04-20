@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Anchor, Box, Button, Divider, Image, Menu, Modal, Select, Slider, Stack, Text, Tooltip } from '@mantine/core';
+import { Anchor, Box, Button, Checkbox, Divider, Image, Menu, Modal, Select, Slider, Stack, Text, Tooltip } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconChevronDown, IconRefresh } from '@tabler/icons-react';
 import type { SplatConfig } from '../core/scene/splat';
@@ -40,6 +40,11 @@ interface ControlPanelProps {
   policies: SelectOption[];
   policyValue: string | null;
   onPolicyChange: (value: string | null) => void;
+  motions: SelectOption[];
+  motionValue: string | null;
+  onMotionChange: (value: string | null) => void;
+  showReferenceMotion: boolean;
+  onShowReferenceMotionChange: (value: boolean) => void;
   /** Whether command controls are enabled */
   commandsEnabled?: boolean;
   /** Callback when reset button is pressed */
@@ -133,6 +138,11 @@ function ControlPanel(props: ControlPanelProps) {
     policies,
     policyValue,
     onPolicyChange,
+    motions,
+    motionValue,
+    onMotionChange,
+    showReferenceMotion,
+    onShowReferenceMotionChange,
     commandsEnabled = false,
     onReset,
   } = props;
@@ -413,6 +423,36 @@ function ControlPanel(props: ControlPanelProps) {
                 comboboxProps={{ zIndex: 1000 }}
               />
             </LabeledInput>
+          )}
+
+          {motions.length > 0 && (
+            <>
+              <LabeledInput id="motion-select" label="Motion">
+                <Select
+                  id="motion-select"
+                  placeholder="Select motion"
+                  data={motions}
+                  value={motionValue}
+                  onChange={onMotionChange}
+                  size="xs"
+                  radius="xs"
+                  searchable
+                  clearable={false}
+                  styles={{
+                    input: { minHeight: '1.625rem', height: '1.625rem', padding: '0.5em' },
+                  }}
+                  comboboxProps={{ zIndex: 1000 }}
+                />
+              </LabeledInput>
+              <Box pb="0.5em" px="xs">
+                <Checkbox
+                  label="Show reference"
+                  checked={showReferenceMotion}
+                  onChange={(event) => onShowReferenceMotionChange(event.currentTarget.checked)}
+                  size="xs"
+                />
+              </Box>
+            </>
           )}
 
           {/* Command Groups - only show if there are commands */}

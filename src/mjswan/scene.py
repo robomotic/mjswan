@@ -22,6 +22,7 @@ from .adapters import (
     adapt_terminations,
     resolve_action_scales,
 )
+from .motion import MotionConfig
 from .policy import PolicyConfig, PolicyHandle
 from .splat import SplatConfig, SplatHandle
 from .viewer_config import ViewerConfig
@@ -399,6 +400,8 @@ class SceneHandle:
             )
 
         run_paths = [run_path] if isinstance(run_path, str) else run_path
+        tracking_motion_term = _extract_tracking_motion_term(commands)
+        tracking_motion_cache: dict[str, tuple[str, bytes]] = {}
 
         handles = []
         seen_names: set[str] = set()
@@ -419,6 +422,12 @@ class SceneHandle:
                         actions=actions,
                         terminations=terminations,
                         extras=extras,
+                    )
+                    _attach_tracking_motion(
+                        handle,
+                        path,
+                        tracking_motion_term,
+                        tracking_motion_cache,
                     )
                     handles.append(handle)
         else:
@@ -451,6 +460,13 @@ class SceneHandle:
                             default_joint_pos=export_context.default_joint_pos or None,
                             encoder_bias=export_context.encoder_bias or None,
                             extras=extras,
+                        )
+                        _attach_tracking_motion(
+                            handle,
+                            path,
+                            tracking_motion_term,
+                            tracking_motion_cache,
+                            dataset_joint_names=export_context.joint_names or None,
                         )
                         handles.append(handle)
             finally:
@@ -635,3 +651,47 @@ class SceneHandle:
 
 
 __all__ = ["ViewerConfig", "SceneConfig", "SceneHandle", "SplatConfig", "SplatHandle"]
+
+
+def _extract_tracking_motion_term(commands: Mapping[str, Any] | None) -> Any | None:
+    if not commands:
+        return None
+    term = commands.get("motion")
+    if term is None:
+        return None
+    class_name = type(term).__name__
+    if class_name == "MotionCommandCfg":
+        return term
+    if hasattr(term, "anchor_body_name") and hasattr(term, "body_names"):
+        return term
+    return None
+
+
+def _attach_tracking_motion(
+    handle: PolicyHandle,
+    run_path: str,
+    tracking_motion_term: Any | None,
+    cache: dict[str, tuple[str, bytes]],
+    *,
+    dataset_joint_names: list[str] | None = None,
+) -> None:
+    if tracking_motion_term is None:
+        return
+
+    from .wandb_utils import fetch_motion_npz_from_wandb_run
+
+    if run_path not in cache:
+        cache[run_path] = fetch_motion_npz_from_wandb_run(run_path)
+    motion_name, payload = cache[run_path]
+
+    motion = MotionConfig(
+        name=motion_name,
+        data=payload,
+        anchor_body_name=getattr(tracking_motion_term, "anchor_body_name", ""),
+        body_names=tuple(getattr(tracking_motion_term, "body_names", ()) or ()),
+        dataset_joint_names=dataset_joint_names,
+        default=True,
+    )
+    for existing in handle._config.motions:
+        existing.default = False
+    handle._config.motions.append(motion)

@@ -209,6 +209,22 @@ to select the target joint.
 """
 
 # ---------------------------------------------------------------------------
+# Motion tracking
+# ---------------------------------------------------------------------------
+
+motion_anchor_pos_b = ObsFunc("MotionAnchorPosB")
+"""Reference anchor position relative to the robot anchor frame."""
+
+motion_anchor_ori_b = ObsFunc("MotionAnchorOriB")
+"""Reference anchor orientation relative to the robot anchor frame."""
+
+robot_body_pos_b = ObsFunc("RobotBodyPosB")
+"""Robot body positions expressed in the robot anchor frame."""
+
+robot_body_ori_b = ObsFunc("RobotBodyOriB")
+"""Robot body orientations expressed in the robot anchor frame."""
+
+# ---------------------------------------------------------------------------
 # Sensors (not supported in browser)
 # ---------------------------------------------------------------------------
 
@@ -251,6 +267,10 @@ __all__ = [
     "velocity_command_with_oscillators",
     "impedance_command",
     "joint_pos_cos_sin",
+    "motion_anchor_pos_b",
+    "motion_anchor_ori_b",
+    "robot_body_pos_b",
+    "robot_body_ori_b",
     "builtin_sensor",
     "height_scan",
 ]

@@ -12,7 +12,6 @@ import {
   quatToRot6d,
 } from './math';
 import type { PolicyState } from '../policy/types';
-import type { TrackingHelper } from '../policy/modules/TrackingPolicy';
 import type { PolicyRunner } from '../policy/PolicyRunner';
 import { getCommandManager } from '../command';
 import {
@@ -20,11 +19,38 @@ import {
   VelocityCommandWithOscillatorsObservation,
   GeneratedCommandsObservation,
 } from './CommandObservation';
+import { TrackingCommand } from '../command/TrackingCommand';
 
-function getTrackingContext(runner: PolicyRunner): TrackingHelper | null {
-  const context = runner.getPolicyModuleContext();
-  const tracking = context.tracking as TrackingHelper | undefined;
-  return tracking ?? null;
+type TrackingSource = {
+  refJointPos: Float32Array[];
+  refRootPos: Float32Array[];
+  refRootQuat: Float32Array[];
+  refIdx: number;
+  refLen: number;
+  nJoints: number;
+  isReady(): boolean;
+  getAnchorPos(frameIndex?: number): Float32Array | null;
+  getAnchorQuat(frameIndex?: number): Float32Array | null;
+  getAnchorBodyName(): string | null;
+  getBodyNames(): string[];
+};
+
+function getTrackingContext(_runner: PolicyRunner): TrackingSource | null {
+  const command = getCommandManager().getTerm('motion');
+  return command instanceof TrackingCommand ? command : null;
+}
+
+function getBodyIdByName(mjModel: MjModel | null, bodyName: string): number {
+  if (!mjModel) {
+    return -1;
+  }
+  for (let b = 0; b < mjModel.nbody; b++) {
+    const name = mjModel.body(b).name;
+    if (name === bodyName || name.endsWith(`/${bodyName}`)) {
+      return b;
+    }
+  }
+  return -1;
 }
 
 function normalizeScale(scale: unknown, size: number, fallback = 1.0): Float32Array | null {
@@ -427,6 +453,164 @@ export class TargetProjectedGravityBObs extends ObservationBase {
       out[offset++] = gLocal[0];
       out[offset++] = gLocal[1];
       out[offset++] = gLocal[2];
+    }
+    return out;
+  }
+}
+
+export class MotionAnchorPosB extends ObservationBase {
+  get size(): number {
+    return 3;
+  }
+
+  compute(_state: PolicyState): Float32Array {
+    const tracking = getTrackingContext(this.runner);
+    const context = this.runner.getContext();
+    const mjModel = context?.mjModel ?? null;
+    const mjData = context?.mjData ?? null;
+    if (!tracking || !tracking.isReady()) {
+      return new Float32Array(3);
+    }
+    const anchorPos = tracking.getAnchorPos();
+    const anchorQuat = tracking.getAnchorQuat();
+    const anchorName = tracking.getAnchorBodyName();
+    if (!anchorPos || !anchorQuat) {
+      return new Float32Array(3);
+    }
+    if (!anchorName || !mjModel || !mjData) {
+      return new Float32Array(3);
+    }
+    const currentAnchorId = getBodyIdByName(mjModel, anchorName);
+    if (currentAnchorId < 0) {
+      return new Float32Array(3);
+    }
+    const currentPos = mjData.xpos.slice(currentAnchorId * 3, currentAnchorId * 3 + 3);
+    const currentQuat = normalizeQuat(mjData.xquat.slice(currentAnchorId * 4, currentAnchorId * 4 + 4));
+    const diff = [
+      anchorPos[0] - currentPos[0],
+      anchorPos[1] - currentPos[1],
+      anchorPos[2] - currentPos[2],
+    ];
+    const diffB = quatApplyInv(currentQuat, diff);
+    return Float32Array.from(diffB);
+  }
+}
+
+export class MotionAnchorOriB extends ObservationBase {
+  get size(): number {
+    return 6;
+  }
+
+  compute(_state: PolicyState): Float32Array {
+    const tracking = getTrackingContext(this.runner);
+    const context = this.runner.getContext();
+    const mjModel = context?.mjModel ?? null;
+    const mjData = context?.mjData ?? null;
+    if (!tracking || !tracking.isReady()) {
+      return new Float32Array(6);
+    }
+    const anchorQuat = tracking.getAnchorQuat();
+    const anchorName = tracking.getAnchorBodyName();
+    if (!anchorQuat) {
+      return new Float32Array(6);
+    }
+    if (!anchorName || !mjModel || !mjData) {
+      return new Float32Array(6);
+    }
+    const currentAnchorId = getBodyIdByName(mjModel, anchorName);
+    if (currentAnchorId < 0) {
+      return new Float32Array(6);
+    }
+    const currentQuat = normalizeQuat(mjData.xquat.slice(currentAnchorId * 4, currentAnchorId * 4 + 4));
+    const rel = quatMultiply(quatInverse(currentQuat), normalizeQuat(anchorQuat));
+    return Float32Array.from(quatToRot6d(rel));
+  }
+}
+
+export class RobotBodyPosB extends ObservationBase {
+  get size(): number {
+    const tracking = getTrackingContext(this.runner);
+    return tracking ? tracking.getBodyNames().length * 3 : 0;
+  }
+
+  compute(): Float32Array {
+    const tracking = getTrackingContext(this.runner);
+    const context = this.runner.getContext();
+    const mjModel = context?.mjModel ?? null;
+    const mjData = context?.mjData ?? null;
+    if (!tracking || !tracking.isReady() || !mjModel || !mjData) {
+      return new Float32Array(this.size);
+    }
+    const bodyNames = tracking.getBodyNames();
+    const anchorName = tracking.getAnchorBodyName();
+    if (!anchorName) {
+      return new Float32Array(this.size);
+    }
+    const anchorId = getBodyIdByName(mjModel, anchorName);
+    if (anchorId < 0) {
+      return new Float32Array(this.size);
+    }
+    const anchorPos = mjData.xpos.slice(anchorId * 3, anchorId * 3 + 3);
+    const anchorQuat = normalizeQuat(mjData.xquat.slice(anchorId * 4, anchorId * 4 + 4));
+    const out = new Float32Array(bodyNames.length * 3);
+    let offset = 0;
+    for (const bodyName of bodyNames) {
+      const bodyId = getBodyIdByName(mjModel, bodyName);
+      if (bodyId < 0) {
+        offset += 3;
+        continue;
+      }
+      const pos = mjData.xpos.slice(bodyId * 3, bodyId * 3 + 3);
+      const diff = [
+        pos[0] - anchorPos[0],
+        pos[1] - anchorPos[1],
+        pos[2] - anchorPos[2],
+      ];
+      const local = quatApplyInv(anchorQuat, diff);
+      out.set(local, offset);
+      offset += 3;
+    }
+    return out;
+  }
+}
+
+export class RobotBodyOriB extends ObservationBase {
+  get size(): number {
+    const tracking = getTrackingContext(this.runner);
+    return tracking ? tracking.getBodyNames().length * 6 : 0;
+  }
+
+  compute(): Float32Array {
+    const tracking = getTrackingContext(this.runner);
+    const context = this.runner.getContext();
+    const mjModel = context?.mjModel ?? null;
+    const mjData = context?.mjData ?? null;
+    if (!tracking || !tracking.isReady() || !mjModel || !mjData) {
+      return new Float32Array(this.size);
+    }
+    const bodyNames = tracking.getBodyNames();
+    const anchorName = tracking.getAnchorBodyName();
+    if (!anchorName) {
+      return new Float32Array(this.size);
+    }
+    const anchorId = getBodyIdByName(mjModel, anchorName);
+    if (anchorId < 0) {
+      return new Float32Array(this.size);
+    }
+    const anchorQuat = normalizeQuat(mjData.xquat.slice(anchorId * 4, anchorId * 4 + 4));
+    const anchorInv = quatInverse(anchorQuat);
+    const out = new Float32Array(bodyNames.length * 6);
+    let offset = 0;
+    for (const bodyName of bodyNames) {
+      const bodyId = getBodyIdByName(mjModel, bodyName);
+      if (bodyId < 0) {
+        offset += 6;
+        continue;
+      }
+      const bodyQuat = normalizeQuat(mjData.xquat.slice(bodyId * 4, bodyId * 4 + 4));
+      const localQuat = quatMultiply(anchorInv, bodyQuat);
+      out.set(quatToRot6d(localQuat), offset);
+      offset += 6;
     }
     return out;
   }
@@ -1017,6 +1201,10 @@ export const Observations = {
   TargetRootZObs,
   TargetJointPosObs,
   TargetProjectedGravityBObs,
+  MotionAnchorPosB,
+  MotionAnchorOriB,
+  RobotBodyPosB,
+  RobotBodyOriB,
   BaseLinearVelocity,
   BaseAngularVelocity,
   JointVelocities,

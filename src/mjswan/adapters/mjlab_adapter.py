@@ -234,11 +234,37 @@ def _adapt_term_func(func: Any) -> TermFunc:
     )
 
 
+def _sanitize_termination_params(params: dict[str, Any]) -> dict[str, Any]:
+    """Strip mjlab-only termination params while keeping useful scope data."""
+    if not params:
+        return params
+
+    result = {
+        k: v for k, v in params.items() if k != "asset_cfg" and not _is_from_mjlab(v)
+    }
+    asset_cfg = params.get("asset_cfg")
+    if not _is_from_mjlab(asset_cfg):
+        return result
+
+    entity_name = getattr(asset_cfg, "name", None)
+    if entity_name:
+        result["entity_name"] = entity_name
+
+    body_names = getattr(asset_cfg, "body_names", None)
+    if isinstance(body_names, (list, tuple)):
+        result["body_names"] = [str(name) for name in body_names]
+    elif isinstance(body_names, str):
+        result["body_names"] = [body_names]
+
+    return result
+
+
 def _adapt_term_cfg(term: Any) -> MjswanTerminationTermCfg:
     """Convert a single mjlab ``TerminationTermCfg`` to mjswan."""
+    raw_params = dict(getattr(term, "params", None) or {})
     return MjswanTerminationTermCfg(
         func=_adapt_term_func(term.func),
-        params=dict(getattr(term, "params", None) or {}),
+        params=_sanitize_termination_params(raw_params),
         time_out=getattr(term, "time_out", False),
     )
 

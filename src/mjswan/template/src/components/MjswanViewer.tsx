@@ -13,6 +13,8 @@ type MjswanViewerProps = {
   cameraConfig?: ViewerConfig | null;
   eventsConfig?: EventConfig[] | null;
   terrainData?: TerrainData | null;
+  selectedMotion?: string | null;
+  showReferenceMotion?: boolean;
   onStatusChange?: (status: string) => void;
   onError?: (error: Error) => void;
   onReady?: () => void;
@@ -31,6 +33,8 @@ const MjswanViewer = ({
   cameraConfig,
   eventsConfig,
   terrainData,
+  selectedMotion,
+  showReferenceMotion = true,
   onStatusChange,
   onError,
   onReady,
@@ -43,6 +47,10 @@ const MjswanViewer = ({
   // by which time App.tsx's selectedSplat effect has already fired.
   const splatConfigRef = useRef(splatConfig);
   splatConfigRef.current = splatConfig;
+  const selectedMotionRef = useRef(selectedMotion);
+  selectedMotionRef.current = selectedMotion;
+  const showReferenceRef = useRef(showReferenceMotion);
+  showReferenceRef.current = showReferenceMotion;
 
   useEffect(() => {
     let cancelled = false;
@@ -80,6 +88,8 @@ const MjswanViewer = ({
 
       notify('Loading scene assets...');
       await runtimeRef.current.loadEnvironment(scenePath, policyConfigPath ?? null, splatConfigRef.current ?? null, cameraConfig ?? null, eventsConfig ?? null, terrainData ?? null);
+      await runtimeRef.current.setSelectedMotion(selectedMotionRef.current ?? null);
+      runtimeRef.current.setReferenceVisible(showReferenceRef.current);
       if (cancelled) {
         return;
       }
@@ -113,6 +123,17 @@ const MjswanViewer = ({
       runtimeRef.current = null;
     };
   }, [scenePath, baseUrl, policyConfigPath, cameraConfig, eventsConfig, terrainData, onStatusChange, onError, onReady]);
+
+  useEffect(() => {
+    if (!runtimeRef.current) {
+      return;
+    }
+    void runtimeRef.current.setSelectedMotion(selectedMotion ?? null);
+  }, [selectedMotion]);
+
+  useEffect(() => {
+    runtimeRef.current?.setReferenceVisible(showReferenceMotion);
+  }, [showReferenceMotion]);
 
   return <div ref={containerRef} className="viewer" />;
 };

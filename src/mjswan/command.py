@@ -163,6 +163,27 @@ def velocity_command(
     )
 
 
+def _serialize_motion_command(cfg: Any) -> dict[str, Any]:
+    """Convert mjlab's ``MotionCommandCfg`` into browser tracking metadata."""
+    data: dict[str, Any] = {
+        "anchor_body_name": getattr(cfg, "anchor_body_name", ""),
+        "body_names": list(getattr(cfg, "body_names", ()) or ()),
+    }
+    entity_name = getattr(cfg, "entity_name", None)
+    if entity_name:
+        data["entity_name"] = entity_name
+    return data
+
+
+register_command_term(
+    "MotionCommandCfg",
+    CommandTermSpec(
+        ts_name="TrackingCommand",
+        serializer=_serialize_motion_command,
+    ),
+)
+
+
 __all__ = [
     "Button",
     "ButtonConfig",
