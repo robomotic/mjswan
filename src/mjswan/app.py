@@ -34,11 +34,8 @@ class mjswanApp:
             host: Host to bind the server to.
             port: Port to run the server on.
             open_browser: Whether to automatically open a browser.
-            colab: Run in Google Colab mode — starts a background thread server
-                and displays the viewer as an inline iframe via
-                ``google.colab.output.serve_kernel_port_as_iframe``.
-            height: Height of the Colab iframe in pixels (only used when
-                ``colab=True``).
+            colab: Run in Google Colab mode.
+            height: Height of the Colab iframe in pixels (only used when ``colab=True``).
         """
         if not self._app_dir.exists():
             raise RuntimeError(f"Application directory {self._app_dir} does not exist.")
@@ -60,9 +57,6 @@ class mjswanApp:
                 self.send_header("Cross-Origin-Opener-Policy", "same-origin")
                 self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
                 super().end_headers()
-
-            def log_message(self, format, *args):  # noqa: A002
-                pass  # suppress per-request access logs
 
         handler = CrossOriginIsolatedHandler
 
