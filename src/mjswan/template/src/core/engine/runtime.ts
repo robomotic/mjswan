@@ -126,6 +126,7 @@ export class mjswanRuntime {
   private onnxModule: OnnxModule | null;
   private onnxInputDict: Record<string, ort.Tensor> | null;
   private onnxInferencing: boolean;
+  private onnxTimeStep: number;
   private terminationManager: TerminationManager | null;
   private eventManager: EventManager | null;
   private terrainData: TerrainData | null;
@@ -229,6 +230,7 @@ export class mjswanRuntime {
     this.onnxModule = null;
     this.onnxInputDict = null;
     this.onnxInferencing = false;
+    this.onnxTimeStep = 0;
     this.terminationManager = null;
     this.eventManager = null;
     this.terrainData = null;
@@ -578,6 +580,7 @@ export class mjswanRuntime {
     this.onnxModule = null;
     this.onnxInputDict = null;
     this.onnxInferencing = false;
+    this.onnxTimeStep = 0;
     this.terminationManager = null;
     // Note: eventManager and terrainData are scene-level state set in loadEnvironment; do not clear here.
 
@@ -956,6 +959,10 @@ export class mjswanRuntime {
       });
     }
     getCommandManager().resetTerms();
+    if (this.onnxModule) {
+      this.onnxInputDict = this.onnxModule.initInput();
+    }
+    this.onnxTimeStep = 0;
     this.mujoco.mj_forward(this.mjModel, this.mjData);
     this.lastSimState.bodies.clear();
     this.updateCachedState();
@@ -1048,6 +1055,9 @@ export class mjswanRuntime {
         this.onnxInputDict = this.onnxModule.initInput();
       }
       const input: Record<string, ort.Tensor> = { ...this.onnxInputDict };
+      if (this.onnxModule.inKeys.includes('time_step')) {
+        input.time_step = new ort.Tensor('float32', new Float32Array([this.onnxTimeStep]), [1, 1]);
+      }
       for (const [key, value] of Object.entries(obs)) {
         input[key] = new ort.Tensor('float32', value, [1, value.length]);
       }
@@ -1064,6 +1074,9 @@ export class mjswanRuntime {
       const [result, carry] = await this.onnxModule.runInference(input);
       if (Object.keys(carry).length > 0) {
         this.onnxInputDict = { ...this.onnxInputDict, ...carry };
+      }
+      if (this.onnxModule.inKeys.includes('time_step')) {
+        this.onnxTimeStep += 1;
       }
 
       const outKey = this.onnxModule.outKeys[0];

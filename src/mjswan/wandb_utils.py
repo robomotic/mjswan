@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import copy
 import re
 import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import onnx
 
@@ -43,6 +45,42 @@ def resolve_wandb_run_path(
     )
 
 
+def resolve_wandb_artifact_path(
+    wandb_artifact_path: str,
+) -> tuple[str, str, str]:
+    """Resolve a W&B artifact reference to ``(artifact_name, type, file_path)``.
+
+    Accepts either:
+    - a fully-qualified artifact name like ``entity/project/name:v0``
+    - a W&B artifact URL like
+      ``https://wandb.ai/entity/project/artifacts/motions/name/v0/files/motion.npz``
+    """
+    parsed = urlparse(wandb_artifact_path)
+    if parsed.scheme and parsed.netloc:
+        path = parsed.path.strip("/")
+        match = re.match(
+            r"^(?P<entity>[^/]+)/(?P<project>[^/]+)/artifacts/"
+            r"(?P<artifact_type>[^/]+)/(?P<name>[^/]+)/(?P<version>[^/]+)"
+            r"(?:/files/(?P<file_path>.+))?$",
+            path,
+        )
+        if match is None:
+            raise ValueError(
+                "Unsupported W&B artifact URL format. "
+                "Expected something like "
+                "'https://wandb.ai/entity/project/artifacts/motions/name/v0/files/motion.npz'."
+            )
+        artifact_name = (
+            f"{match.group('entity')}/{match.group('project')}/"
+            f"{match.group('name')}:{match.group('version')}"
+        )
+        artifact_type = match.group("artifact_type")
+        file_path = match.group("file_path") or "motion.npz"
+        return artifact_name, artifact_type, file_path
+
+    return wandb_artifact_path, "motions", "motion.npz"
+
+
 def _extract_required_capacity(message: str, name: str) -> int | None:
     match = re.search(rf"{name} overflow \({name} must be >= (\d+)\)", message)
     if match is None:
@@ -55,7 +93,9 @@ def _next_capacity(required: int) -> int:
     return required + slack
 
 
-def create_pt_onnx_export_context(task_id: str) -> PtOnnxExportContext:
+def create_pt_onnx_export_context(
+    task_id: str, *, env_cfg: Any | None = None
+) -> PtOnnxExportContext:
     """Create a reusable mjlab export context for PT->ONNX conversion.
 
     Builds the mjlab environment and runner once so that multiple
@@ -74,7 +114,11 @@ def create_pt_onnx_export_context(task_id: str) -> PtOnnxExportContext:
             "Install them with: pip install mjlab torch"
         ) from e
 
-    env_cfg = load_env_cfg(task_id, play=True)
+    env_cfg = (
+        copy.deepcopy(env_cfg)
+        if env_cfg is not None
+        else load_env_cfg(task_id, play=True)
+    )
     env_cfg.scene.num_envs = 1
     agent_cfg = load_rl_cfg(task_id)
 
@@ -223,6 +267,30 @@ def fetch_motion_npz_from_wandb_run(run_path: str) -> tuple[str, bytes]:
         return motion_name, motion_path.read_bytes()
 
 
+def fetch_motion_npz_from_wandb_artifact(
+    wandb_artifact_path: str,
+) -> tuple[str, bytes]:
+    """Download ``motion.npz`` directly from a W&B motion artifact."""
+    import wandb
+
+    artifact_name, artifact_type, file_path = resolve_wandb_artifact_path(
+        wandb_artifact_path
+    )
+
+    api = wandb.Api()
+    artifact = api.artifact(artifact_name, type=artifact_type)
+    motion_name = artifact_name.split("/")[-1].split(":", 1)[0] or "motion"
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(artifact.download(root=tmp_dir))
+        motion_path = root / file_path
+        if not motion_path.exists():
+            raise ValueError(
+                f"Motion artifact '{artifact_name}' did not contain '{file_path}'"
+            )
+        return motion_name, motion_path.read_bytes()
+
+
 def fetch_pt_onnx_from_wandb_run(
     run_path: str,
     task_id: str,
@@ -299,8 +367,10 @@ def fetch_pt_onnx_from_wandb_run(
 __all__ = [
     "PtOnnxExportContext",
     "create_pt_onnx_export_context",
+    "fetch_motion_npz_from_wandb_artifact",
     "fetch_motion_npz_from_wandb_run",
     "fetch_onnx_from_wandb_run",
     "fetch_pt_onnx_from_wandb_run",
+    "resolve_wandb_artifact_path",
     "resolve_wandb_run_path",
 ]

@@ -267,6 +267,24 @@ class TestAdaptTerminations:
         assert result["timeout"].time_out is True
         assert result["timeout"].func.ts_name == "TimeOut"
 
+    def test_mjlab_term_strips_asset_cfg_from_params(self):
+        mjlab_func = _make_mjlab_term_func("bad_orientation")
+        asset_cfg = FakeMjlabSceneEntityCfg(name="robot", body_names=("torso_link",))
+        mjlab_cfg = FakeMjlabTermTermCfg(
+            func=mjlab_func,
+            params={"limit_angle": 1.0, "asset_cfg": asset_cfg},
+            time_out=False,
+        )
+
+        result = adapt_terminations({"fallen": mjlab_cfg})
+        assert result is not None
+        term = result["fallen"]
+        assert term.params == {
+            "limit_angle": 1.0,
+            "entity_name": "robot",
+            "body_names": ["torso_link"],
+        }
+
     def test_unknown_mjlab_term_func_raises(self):
         mjlab_func = _make_mjlab_term_func("nonexistent_term")
         mjlab_cfg = FakeMjlabTermTermCfg(func=mjlab_func)

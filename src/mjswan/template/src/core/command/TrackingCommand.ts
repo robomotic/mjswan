@@ -351,6 +351,15 @@ export class TrackingCommand implements CommandTerm {
     return normalizeQuat(frame.slice(offset, offset + 4));
   }
 
+  getBodyPosW(frameIndex = this.refIdx): Float32Array | null {
+    const motion = this.selectedMotion;
+    if (!motion) {
+      return null;
+    }
+    const frame = motion.bodyPosW[frameIndex];
+    return frame ? frame.slice() : null;
+  }
+
   private createGhostRoot(): THREE.Group | null {
     const bodies = this.context.bodies ?? null;
     if (!bodies) {
