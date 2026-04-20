@@ -42,6 +42,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -B "$BRANCH"
+          git restore uv.lock
           git add src/mjswan/template/src/Version.ts
           git commit -m "Update contributors list"
           git push -f origin "$BRANCH"
