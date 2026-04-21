@@ -958,6 +958,7 @@ export class mjswanRuntime {
         terrainData: this.terrainData,
       });
     }
+    this.mujoco.mj_forward(this.mjModel, this.mjData);
     getCommandManager().resetTerms();
     if (this.onnxModule) {
       this.onnxInputDict = this.onnxModule.initInput();

@@ -45,6 +45,7 @@ Thumbs.db
 # Artifacts
 dist/
 logs/
+artifacts/
 
 # Python virtual environments
 venv
