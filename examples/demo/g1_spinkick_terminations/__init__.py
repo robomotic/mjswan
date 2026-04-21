@@ -6,7 +6,7 @@ from pathlib import Path
 
 from mjswan import TermFunc, register_termination_func
 
-_TERM_DIR = Path(__file__).resolve().parent / "g1_spinkick_terminations"
+_TERM_DIR = Path(__file__).resolve().parent
 
 register_termination_func(
     "bad_anchor_pos_z_only",
