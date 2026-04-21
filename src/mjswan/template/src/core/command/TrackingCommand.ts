@@ -24,6 +24,9 @@ type LoadedTrackingMotion = TrackingMotionConfig & {
   frameCount: number;
 };
 
+type ScalarRange = [number, number];
+type PoseRange = Partial<Record<'x' | 'y' | 'z' | 'roll' | 'pitch' | 'yaw', ScalarRange>>;
+
 function normalizeQuat(quat: ArrayLike<number>): Float32Array {
   const length = Math.hypot(quat[0] ?? 1, quat[1] ?? 0, quat[2] ?? 0, quat[3] ?? 0) || 1.0;
   return new Float32Array([
@@ -49,6 +52,39 @@ function splitFrames(entry: NpzEntry): Float32Array[] {
   return frames;
 }
 
+function normalizeScalarRange(value: unknown, fallback: ScalarRange): ScalarRange {
+  if (!Array.isArray(value) || value.length < 2) {
+    return fallback;
+  }
+  const lo = Number(value[0]);
+  const hi = Number(value[1]);
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) {
+    return fallback;
+  }
+  return [lo, hi];
+}
+
+function normalizeRangeMap(value: unknown): PoseRange {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  const out: PoseRange = {};
+  for (const key of ['x', 'y', 'z', 'roll', 'pitch', 'yaw'] as const) {
+    const range = normalizeScalarRange((value as Record<string, unknown>)[key], [0.0, 0.0]);
+    if (range[0] !== 0.0 || range[1] !== 0.0) {
+      out[key] = range;
+    }
+  }
+  return out;
+}
+
+function sampleRangeValue(range: ScalarRange | undefined): number {
+  if (!range) {
+    return 0.0;
+  }
+  return range[0] + Math.random() * (range[1] - range[0]);
+}
+
 function quatMultiply(a: ArrayLike<number>, b: ArrayLike<number>): Float32Array {
   const aw = a[0] ?? 1;
   const ax = a[1] ?? 0;
@@ -66,36 +102,19 @@ function quatMultiply(a: ArrayLike<number>, b: ArrayLike<number>): Float32Array 
   ]);
 }
 
-function quatInverse(quat: ArrayLike<number>): Float32Array {
-  const q = normalizeQuat(quat);
-  return new Float32Array([q[0], -q[1], -q[2], -q[3]]);
-}
-
-function quatApply(quat: ArrayLike<number>, vec: ArrayLike<number>): Float32Array {
-  const q = normalizeQuat(quat);
-  const vx = vec[0] ?? 0;
-  const vy = vec[1] ?? 0;
-  const vz = vec[2] ?? 0;
-  const tx = 2.0 * (q[2] * vz - q[3] * vy);
-  const ty = 2.0 * (q[3] * vx - q[1] * vz);
-  const tz = 2.0 * (q[1] * vy - q[2] * vx);
-  const cx = q[2] * tz - q[3] * ty;
-  const cy = q[3] * tx - q[1] * tz;
-  const cz = q[1] * ty - q[2] * tx;
+function quatFromEulerXYZ(roll: number, pitch: number, yaw: number): Float32Array {
+  const cr = Math.cos(roll * 0.5);
+  const sr = Math.sin(roll * 0.5);
+  const cp = Math.cos(pitch * 0.5);
+  const sp = Math.sin(pitch * 0.5);
+  const cy = Math.cos(yaw * 0.5);
+  const sy = Math.sin(yaw * 0.5);
   return new Float32Array([
-    vx + q[0] * tx + cx,
-    vy + q[0] * ty + cy,
-    vz + q[0] * tz + cz,
+    cr * cp * cy + sr * sp * sy,
+    sr * cp * cy - cr * sp * sy,
+    cr * sp * cy + sr * cp * sy,
+    cr * cp * sy - sr * sp * cy,
   ]);
-}
-
-function yawQuat(quat: ArrayLike<number>): Float32Array {
-  const q = normalizeQuat(quat);
-  const yaw = Math.atan2(
-    2 * (q[0] * q[3] + q[1] * q[2]),
-    1 - 2 * (q[2] * q[2] + q[3] * q[3]),
-  );
-  return new Float32Array([Math.cos(yaw / 2), 0, 0, Math.sin(yaw / 2)]);
 }
 
 function setGhostMaterial(material: THREE.Material): THREE.Material {
@@ -143,7 +162,12 @@ export class TrackingCommand implements CommandTerm {
   private selectedRootBodyIndex: number;
   private datasetQposAdr: number[];
   private frameAccumulator: number;
+  private justReset: boolean;
   private referenceVisible: boolean;
+  private readonly samplingMode: string;
+  private readonly poseRange: PoseRange;
+  private readonly velocityRange: PoseRange;
+  private readonly jointPositionRange: ScalarRange;
   refJointPos: Float32Array[];
   refRootPos: Float32Array[];
   refRootQuat: Float32Array[];
@@ -169,7 +193,12 @@ export class TrackingCommand implements CommandTerm {
     this.selectedRootBodyIndex = 0;
     this.datasetQposAdr = [];
     this.frameAccumulator = 0.0;
+    this.justReset = true;
     this.referenceVisible = true;
+    this.samplingMode = typeof config.sampling_mode === 'string' ? config.sampling_mode : 'start';
+    this.poseRange = normalizeRangeMap(config.pose_range);
+    this.velocityRange = normalizeRangeMap(config.velocity_range);
+    this.jointPositionRange = normalizeScalarRange(config.joint_position_range, [0.0, 0.0]);
     this.refJointPos = [];
     this.refRootPos = [];
     this.refRootQuat = [];
@@ -233,14 +262,15 @@ export class TrackingCommand implements CommandTerm {
       0,
       loaded.body_names.indexOf(loaded.anchor_body_name),
     );
-    this.selectedRootBodyIndex = this.resolveMotionRootBodyIndex(loaded.body_names);
+    this.selectedRootBodyIndex = 0;
     this.datasetQposAdr = this.resolveQposAdr(loaded.dataset_joint_names ?? []);
-    this.refJointPos = loaded.jointPos;
-    this.refIdx = 0;
     this.refLen = loaded.frameCount;
+    this.refJointPos = loaded.jointPos;
+    this.refIdx = this.sampleInitialFrame(this.refLen);
     this.nJoints = loaded.jointPos[0]?.length ?? 0;
     this.frameAccumulator = 0.0;
-    this.updateReferenceAlignment();
+    this.justReset = true;
+    this.updateReferenceState();
     this.applyReferenceStateToSim();
     this.updateGhostPose();
     return true;
@@ -254,15 +284,21 @@ export class TrackingCommand implements CommandTerm {
   }
 
   reset(): void {
-    this.refIdx = 0;
+    this.refIdx = this.sampleInitialFrame(this.refLen);
     this.frameAccumulator = 0.0;
-    this.updateReferenceAlignment();
+    this.justReset = true;
+    this.updateReferenceState();
     this.applyReferenceStateToSim();
     this.updateGhostPose();
   }
 
   update(dt: number): void {
     if (!this.selectedMotion || this.refLen <= 1) {
+      return;
+    }
+    if (this.justReset) {
+      this.justReset = false;
+      this.updateGhostPose();
       return;
     }
     this.frameAccumulator += dt * this.sampleHz;
@@ -330,13 +366,12 @@ export class TrackingCommand implements CommandTerm {
     if (!motion) {
       return null;
     }
-    const frame = motion.bodyPosW[frameIndex];
-    const alignedFrame = this.refBodyPosW[frameIndex];
-    if (!frame || !alignedFrame) {
+    const frame = this.refBodyPosW[frameIndex];
+    if (!frame) {
       return null;
     }
     const offset = this.selectedAnchorBodyIndex * 3;
-    return alignedFrame.slice(offset, offset + 3);
+    return frame.slice(offset, offset + 3);
   }
 
   getAnchorQuat(frameIndex = this.refIdx): Float32Array | null {
@@ -344,13 +379,12 @@ export class TrackingCommand implements CommandTerm {
     if (!motion) {
       return null;
     }
-    const frame = motion.bodyQuatW[frameIndex];
-    const alignedFrame = this.refBodyQuatW[frameIndex];
-    if (!frame || !alignedFrame) {
+    const frame = this.refBodyQuatW[frameIndex];
+    if (!frame) {
       return null;
     }
     const offset = this.selectedAnchorBodyIndex * 4;
-    return normalizeQuat(alignedFrame.slice(offset, offset + 4));
+    return normalizeQuat(frame.slice(offset, offset + 4));
   }
 
   getBodyPosW(frameIndex = this.refIdx): Float32Array | null {
@@ -423,18 +457,49 @@ export class TrackingCommand implements CommandTerm {
     }
     const jointPos = splitFrames(npz['joint_pos']!);
     const jointVel = splitFrames(npz['joint_vel']!);
-    const bodyPosW = splitFrames(npz['body_pos_w']!);
-    const bodyQuatW = splitFrames(npz['body_quat_w']!);
-    const bodyLinVelW = splitFrames(npz['body_lin_vel_w']!);
-    const bodyAngVelW = splitFrames(npz['body_ang_vel_w']!);
+    const bodyPosW = this.selectMotionBodyFrames(splitFrames(npz['body_pos_w']!), config.body_names, 3);
+    const bodyQuatW = this.selectMotionBodyFrames(splitFrames(npz['body_quat_w']!), config.body_names, 4);
+    const bodyLinVelW = this.selectMotionBodyFrames(splitFrames(npz['body_lin_vel_w']!), config.body_names, 3);
+    const bodyAngVelW = this.selectMotionBodyFrames(splitFrames(npz['body_ang_vel_w']!), config.body_names, 3);
     return { ...config, jointPos, jointVel, bodyPosW, bodyQuatW, bodyLinVelW, bodyAngVelW, frameCount: jointPos.length };
   }
 
-  private updateReferenceAlignment(): void {
-    const motion = this.selectedMotion;
+  private selectMotionBodyFrames(frames: Float32Array[], bodyNames: string[], stride: number): Float32Array[] {
     const mjModel = this.context.mjModel;
-    const mjData = this.context.mjData;
-    if (!motion || !mjModel || !mjData || motion.frameCount === 0) {
+    const first = frames[0];
+    if (!mjModel || !first || bodyNames.length === 0) {
+      return frames;
+    }
+
+    const sourceBodyCount = Math.floor(first.length / stride);
+    if (sourceBodyCount === bodyNames.length) {
+      return frames;
+    }
+
+    const rootBodyId = this.findBodyIdByName(bodyNames[0]);
+    const bodyIds = bodyNames.map((name) => this.findBodyIdByName(name));
+    const bodySourceIndices = bodyIds.map((id) => id - rootBodyId);
+    if (rootBodyId < 0 || bodySourceIndices.some((id) => id < 0 || id >= sourceBodyCount)) {
+      console.warn('[TrackingCommand] Could not map all motion body names to MuJoCo body ids; using raw body frames.');
+      return frames;
+    }
+
+    return frames.map((frame) => {
+      const selected = new Float32Array(bodyNames.length * stride);
+      for (let i = 0; i < bodySourceIndices.length; i++) {
+        const sourceOffset = bodySourceIndices[i] * stride;
+        const targetOffset = i * stride;
+        for (let j = 0; j < stride; j++) {
+          selected[targetOffset + j] = frame[sourceOffset + j] ?? 0.0;
+        }
+      }
+      return selected;
+    });
+  }
+
+  private updateReferenceState(): void {
+    const motion = this.selectedMotion;
+    if (!motion || motion.frameCount === 0) {
       this.refRootPos = [];
       this.refRootQuat = [];
       this.refBodyPosW = [];
@@ -444,105 +509,16 @@ export class TrackingCommand implements CommandTerm {
       return;
     }
 
-    const refAnchorOffset = this.selectedAnchorBodyIndex * 3;
-    const refAnchorQuatOffset = this.selectedAnchorBodyIndex * 4;
-    const refRootOffset = this.selectedRootBodyIndex * 3;
-    const refAnchorPos0 = motion.bodyPosW[0]?.slice(refAnchorOffset, refAnchorOffset + 3);
-    const refAnchorQuat0 = motion.bodyQuatW[0]?.slice(refAnchorQuatOffset, refAnchorQuatOffset + 4);
-    const refRootPos0 = motion.bodyPosW[0]?.slice(refRootOffset, refRootOffset + 3);
-    const currentAnchor = this.getCurrentAnchorPose();
-    const spawnZOffset = this.getSpawnZOffset();
-    if (!refAnchorPos0 || !refAnchorQuat0 || !refRootPos0 || !currentAnchor) {
-      this.refBodyPosW = motion.bodyPosW.map((frame) => frame.slice());
-      this.refBodyQuatW = motion.bodyQuatW.map((frame) => frame.slice());
-      this.refBodyLinVelW = motion.bodyLinVelW.map((frame) => frame.slice());
-      this.refBodyAngVelW = motion.bodyAngVelW.map((frame) => frame.slice());
-      this.refRootPos = this.refBodyPosW.map((frame) =>
-        frame.slice(this.selectedRootBodyIndex * 3, this.selectedRootBodyIndex * 3 + 3),
-      );
-      this.refRootQuat = this.refBodyQuatW.map((frame) =>
-        normalizeQuat(frame.slice(this.selectedRootBodyIndex * 4, this.selectedRootBodyIndex * 4 + 4)),
-      );
-      return;
-    }
-
-    const yawDelta = yawQuat(quatMultiply(currentAnchor.quat, quatInverse(refAnchorQuat0)));
-    const rotatedAnchor = quatApply(yawDelta, refAnchorPos0);
-    const rotatedRoot = quatApply(yawDelta, refRootPos0);
-    const offset = new Float32Array([
-      currentAnchor.pos[0] - rotatedAnchor[0],
-      currentAnchor.pos[1] - rotatedAnchor[1],
-      spawnZOffset + refRootPos0[2] - rotatedRoot[2],
-    ]);
-
-    this.refBodyPosW = motion.bodyPosW.map((frame) => {
-      const aligned = new Float32Array(frame.length);
-      for (let i = 0; i < frame.length; i += 3) {
-        const rotated = quatApply(yawDelta, frame.slice(i, i + 3));
-        aligned[i + 0] = offset[0] + rotated[0];
-        aligned[i + 1] = offset[1] + rotated[1];
-        aligned[i + 2] = offset[2] + rotated[2];
-      }
-      return aligned;
-    });
-    this.refBodyQuatW = motion.bodyQuatW.map((frame) => {
-      const aligned = new Float32Array(frame.length);
-      for (let i = 0; i < frame.length; i += 4) {
-        aligned.set(normalizeQuat(quatMultiply(yawDelta, frame.slice(i, i + 4))), i);
-      }
-      return aligned;
-    });
-    this.refBodyLinVelW = motion.bodyLinVelW.map((frame) => {
-      const aligned = new Float32Array(frame.length);
-      for (let i = 0; i < frame.length; i += 3) {
-        aligned.set(quatApply(yawDelta, frame.slice(i, i + 3)), i);
-      }
-      return aligned;
-    });
-    this.refBodyAngVelW = motion.bodyAngVelW.map((frame) => {
-      const aligned = new Float32Array(frame.length);
-      for (let i = 0; i < frame.length; i += 3) {
-        aligned.set(quatApply(yawDelta, frame.slice(i, i + 3)), i);
-      }
-      return aligned;
-    });
+    this.refBodyPosW = motion.bodyPosW.map((frame) => frame.slice());
+    this.refBodyQuatW = motion.bodyQuatW.map((frame) => frame.slice());
+    this.refBodyLinVelW = motion.bodyLinVelW.map((frame) => frame.slice());
+    this.refBodyAngVelW = motion.bodyAngVelW.map((frame) => frame.slice());
     this.refRootPos = this.refBodyPosW.map((frame) =>
       frame.slice(this.selectedRootBodyIndex * 3, this.selectedRootBodyIndex * 3 + 3),
     );
     this.refRootQuat = this.refBodyQuatW.map((frame) =>
       normalizeQuat(frame.slice(this.selectedRootBodyIndex * 4, this.selectedRootBodyIndex * 4 + 4)),
     );
-  }
-
-  private getCurrentAnchorPose(): { pos: Float32Array; quat: Float32Array } | null {
-    const mjModel = this.context.mjModel;
-    const mjData = this.context.mjData;
-    const anchorName = this.getAnchorBodyName();
-    if (!mjModel || !mjData || !anchorName) {
-      return null;
-    }
-    const bodyId = this.findBodyIdByName(anchorName);
-    if (bodyId < 0) {
-      return null;
-    }
-    return {
-      pos: mjData.xpos.slice(bodyId * 3, bodyId * 3 + 3),
-      quat: normalizeQuat(mjData.xquat.slice(bodyId * 4, bodyId * 4 + 4)),
-    };
-  }
-
-  private getSpawnZOffset(): number {
-    const mjModel = this.context.mjModel;
-    const mjData = this.context.mjData;
-    if (!mjModel || !mjData) {
-      return 0.0;
-    }
-    const freeJointIndex = this.findFreeJointIndex();
-    if (freeJointIndex < 0) {
-      return 0.0;
-    }
-    const qposAdr = mjModel.jnt_qposadr[freeJointIndex];
-    return (mjData.qpos[qposAdr + 2] ?? 0.0) - (mjModel.qpos0[qposAdr + 2] ?? 0.0);
   }
 
   private applyReferenceStateToSim(): void {
@@ -553,8 +529,8 @@ export class TrackingCommand implements CommandTerm {
       return;
     }
 
-    const rootPos = this.refRootPos[this.refIdx];
-    const rootQuat = this.refRootQuat[this.refIdx];
+    const rootPos = this.sampleRootPos(this.refIdx);
+    const rootQuat = this.sampleRootQuat(this.refIdx);
     const freeJointIndex = this.findFreeJointIndex();
     if (rootPos && rootQuat && freeJointIndex >= 0) {
       const qposAdr = mjModel.jnt_qposadr[freeJointIndex];
@@ -567,14 +543,8 @@ export class TrackingCommand implements CommandTerm {
       mjData.qpos[qposAdr + 5] = rootQuat[2] ?? 0.0;
       mjData.qpos[qposAdr + 6] = rootQuat[3] ?? 0.0;
 
-      const linVel = this.refBodyLinVelW[this.refIdx]?.slice(
-        this.selectedRootBodyIndex * 3,
-        this.selectedRootBodyIndex * 3 + 3,
-      );
-      const angVel = this.refBodyAngVelW[this.refIdx]?.slice(
-        this.selectedRootBodyIndex * 3,
-        this.selectedRootBodyIndex * 3 + 3,
-      );
+      const linVel = this.sampleRootVelocity(this.refIdx, this.refBodyLinVelW);
+      const angVel = this.sampleRootAngularVelocity(this.refIdx);
       if (linVel && angVel) {
         mjData.qvel[qvelAdr + 0] = linVel[0] ?? 0.0;
         mjData.qvel[qvelAdr + 1] = linVel[1] ?? 0.0;
@@ -585,7 +555,7 @@ export class TrackingCommand implements CommandTerm {
       }
     }
 
-    const jointPos = this.refJointPos[this.refIdx] ?? new Float32Array(0);
+    const jointPos = this.sampleJointPos(this.refIdx);
     const jointVel = motion.jointVel[this.refIdx] ?? new Float32Array(0);
     for (let i = 0; i < this.datasetQposAdr.length && i < jointPos.length; i++) {
       mjData.qpos[this.datasetQposAdr[i]] = jointPos[i] ?? 0.0;
@@ -598,6 +568,82 @@ export class TrackingCommand implements CommandTerm {
     }
 
     this.context.mujoco.mj_forward(mjModel, mjData);
+  }
+
+  private sampleRootPos(frameIndex: number): Float32Array | null {
+    const rootPos = this.refRootPos[frameIndex];
+    if (!rootPos) {
+      return null;
+    }
+    const sampled = rootPos.slice();
+    sampled[0] += sampleRangeValue(this.poseRange.x);
+    sampled[1] += sampleRangeValue(this.poseRange.y);
+    sampled[2] += sampleRangeValue(this.poseRange.z);
+    return sampled;
+  }
+
+  private sampleRootQuat(frameIndex: number): Float32Array | null {
+    const rootQuat = this.refRootQuat[frameIndex];
+    if (!rootQuat) {
+      return null;
+    }
+    const roll = sampleRangeValue(this.poseRange.roll);
+    const pitch = sampleRangeValue(this.poseRange.pitch);
+    const yaw = sampleRangeValue(this.poseRange.yaw);
+    if (roll === 0.0 && pitch === 0.0 && yaw === 0.0) {
+      return rootQuat;
+    }
+    return normalizeQuat(quatMultiply(quatFromEulerXYZ(roll, pitch, yaw), rootQuat));
+  }
+
+  private sampleRootVelocity(frameIndex: number, source: Float32Array[]): Float32Array | null {
+    const rootVel = source[frameIndex]?.slice(
+      this.selectedRootBodyIndex * 3,
+      this.selectedRootBodyIndex * 3 + 3,
+    );
+    if (!rootVel) {
+      return null;
+    }
+    rootVel[0] += sampleRangeValue(this.velocityRange.x);
+    rootVel[1] += sampleRangeValue(this.velocityRange.y);
+    rootVel[2] += sampleRangeValue(this.velocityRange.z);
+    return rootVel;
+  }
+
+  private sampleRootAngularVelocity(frameIndex: number): Float32Array | null {
+    const rootVel = this.refBodyAngVelW[frameIndex]?.slice(
+      this.selectedRootBodyIndex * 3,
+      this.selectedRootBodyIndex * 3 + 3,
+    );
+    if (!rootVel) {
+      return null;
+    }
+    rootVel[0] += sampleRangeValue(this.velocityRange.roll);
+    rootVel[1] += sampleRangeValue(this.velocityRange.pitch);
+    rootVel[2] += sampleRangeValue(this.velocityRange.yaw);
+    return rootVel;
+  }
+
+  private sampleInitialFrame(frameCount: number): number {
+    if (frameCount <= 1 || this.samplingMode === 'start') {
+      return 0;
+    }
+    if (this.samplingMode === 'uniform') {
+      return Math.floor(Math.random() * frameCount);
+    }
+    return 0;
+  }
+
+  private sampleJointPos(frameIndex: number): Float32Array {
+    const jointPos = this.refJointPos[frameIndex] ?? new Float32Array(0);
+    if (this.jointPositionRange[0] === 0.0 && this.jointPositionRange[1] === 0.0) {
+      return jointPos;
+    }
+    const sampled = jointPos.slice();
+    for (let i = 0; i < sampled.length; i++) {
+      sampled[i] += sampleRangeValue(this.jointPositionRange);
+    }
+    return sampled;
   }
 
   private resolveQposAdr(jointNames: string[]): number[] {
@@ -649,30 +695,6 @@ export class TrackingCommand implements CommandTerm {
     return -1;
   }
 
-  private resolveMotionRootBodyIndex(bodyNames: string[]): number {
-    const mjModel = this.context.mjModel;
-    if (!mjModel) {
-      return 0;
-    }
-    const freeJointIndex = this.findFreeJointIndex();
-    if (freeJointIndex < 0) {
-      return 0;
-    }
-    const bodyId = mjModel.jnt_bodyid?.[freeJointIndex] ?? -1;
-    if (bodyId < 0 || bodyId >= mjModel.nbody) {
-      return 0;
-    }
-    const rootBodyName = mjModel.body(bodyId).name;
-    const exact = bodyNames.indexOf(rootBodyName);
-    if (exact >= 0) {
-      return exact;
-    }
-    const suffix = bodyNames.findIndex((name) =>
-      rootBodyName.endsWith(`/${name}`) || name.endsWith(`/${rootBodyName}`)
-    );
-    return suffix >= 0 ? suffix : 0;
-  }
-
   private updateGhostPose(): void {
     if (!this.ghostRoot || !this.ghostData || !this.context.mjModel || !this.selectedMotion || !this.refLen) {
       if (this.ghostRoot) {
@@ -687,7 +709,7 @@ export class TrackingCommand implements CommandTerm {
     const rootPos = this.refRootPos[this.refIdx];
     const rootQuat = this.refRootQuat[this.refIdx];
     const freeJointIndex = this.findFreeJointIndex();
-    if (freeJointIndex >= 0) {
+    if (freeJointIndex >= 0 && rootPos && rootQuat) {
       const qposAdr = this.context.mjModel.jnt_qposadr[freeJointIndex];
       qpos[qposAdr + 0] = rootPos[0] ?? 0.0;
       qpos[qposAdr + 1] = rootPos[1] ?? 0.0;

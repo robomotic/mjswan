@@ -3,43 +3,10 @@ import { TrackingCommand } from '../command/TrackingCommand';
 import { TerminationBase, type TerminationConfig } from './TerminationBase';
 import type { PolicyState } from '../policy/types';
 
-function normalizeQuatBodyPos(quat: ArrayLike<number>): [number, number, number, number] {
-  const length = Math.hypot(quat[0] ?? 1, quat[1] ?? 0, quat[2] ?? 0, quat[3] ?? 0) || 1.0;
-  return [
-    (quat[0] ?? 1) / length,
-    (quat[1] ?? 0) / length,
-    (quat[2] ?? 0) / length,
-    (quat[3] ?? 0) / length,
-  ];
-}
-
-function quatConjugateBodyPos([w, x, y, z]: [number, number, number, number]): [number, number, number, number] {
-  return [w, -x, -y, -z];
-}
-
-function quatMultiplyBodyPos(
-  [aw, ax, ay, az]: [number, number, number, number],
-  [bw, bx, by, bz]: [number, number, number, number],
-): [number, number, number, number] {
-  return [
-    aw * bw - ax * bx - ay * by - az * bz,
-    aw * bx + ax * bw + ay * bz - az * by,
-    aw * by - ax * bz + ay * bw + az * bx,
-    aw * bz + ax * by - ay * bx + az * bw,
-  ];
-}
-
-function quatApplyInvBodyPos(quat: ArrayLike<number>, vec: readonly [number, number, number]): [number, number, number] {
-  const q = normalizeQuatBodyPos(quat);
-  const qInv = quatConjugateBodyPos(q);
-  const vQuat: [number, number, number, number] = [0, vec[0], vec[1], vec[2]];
-  const rotated = quatMultiplyBodyPos(quatMultiplyBodyPos(qInv, vQuat), q);
-  return [rotated[1], rotated[2], rotated[3]];
-}
-
 function getBodyIdByNameBodyPos(mjModel: import('mujoco').MjModel, bodyName: string): number {
   for (let i = 0; i < mjModel.nbody; i++) {
-    if (mjModel.body(i).name === bodyName) {
+    const name = mjModel.body(i).name;
+    if (name === bodyName || name.endsWith(`/${bodyName}`)) {
       return i;
     }
   }
@@ -67,25 +34,15 @@ export class BadMotionBodyPosZOnly extends TerminationBase {
       return false;
     }
 
-    const anchorName = tracking.getAnchorBodyName();
     const bodyNames = this.bodyNames && this.bodyNames.length > 0
       ? this.bodyNames
       : tracking.getBodyNames();
-    if (!anchorName || bodyNames.length === 0) {
+    if (bodyNames.length === 0) {
       return false;
     }
 
-    const anchorId = getBodyIdByNameBodyPos(mjModel, anchorName);
-    if (anchorId < 0) {
-      return false;
-    }
-    const currentAnchorPos = mjData.xpos.slice(anchorId * 3, anchorId * 3 + 3);
-    const currentAnchorQuat = normalizeQuatBodyPos(mjData.xquat.slice(anchorId * 4, anchorId * 4 + 4));
-
-    const refAnchorPos = tracking.getAnchorPos();
-    const refAnchorQuat = tracking.getAnchorQuat();
     const refBodyPosW = tracking.getBodyPosW();
-    if (!refAnchorPos || !refAnchorQuat || !refBodyPosW) {
+    if (!refBodyPosW) {
       return false;
     }
 
@@ -97,21 +54,11 @@ export class BadMotionBodyPosZOnly extends TerminationBase {
         continue;
       }
 
-      const currentBodyPos = mjData.xpos.slice(bodyId * 3, bodyId * 3 + 3);
-      const currentLocal = quatApplyInvBodyPos(currentAnchorQuat, [
-        currentBodyPos[0] - currentAnchorPos[0],
-        currentBodyPos[1] - currentAnchorPos[1],
-        currentBodyPos[2] - currentAnchorPos[2],
-      ]);
-
       const refOffset = bodySlot * 3;
-      const refLocal = quatApplyInvBodyPos(refAnchorQuat, [
-        refBodyPosW[refOffset + 0] - refAnchorPos[0],
-        refBodyPosW[refOffset + 1] - refAnchorPos[1],
-        refBodyPosW[refOffset + 2] - refAnchorPos[2],
-      ]);
+      const refZ = refBodyPosW[refOffset + 2] ?? 0.0;
+      const currentZ = mjData.xpos[bodyId * 3 + 2] ?? 0.0;
 
-      if (Math.abs(refLocal[2] - currentLocal[2]) > this.threshold) {
+      if (Math.abs(refZ - currentZ) > this.threshold) {
         return true;
       }
     }

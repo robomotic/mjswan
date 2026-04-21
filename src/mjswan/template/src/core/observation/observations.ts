@@ -160,7 +160,9 @@ export class JointPos extends ObservationBase {
   private maxStep: number;
   private history: Float32Array[];
   private subtractDefault: boolean;
+  private biased: boolean;
   private defaultJointPos: Float32Array;
+  private encoderBias: Float32Array;
   private scale: Float32Array | null;
   private qposAdr: number[] | null;
 
@@ -186,7 +188,9 @@ export class JointPos extends ObservationBase {
     this.maxStep = Math.max(...this.posSteps);
     this.history = Array.from({ length: this.maxStep + 1 }, () => new Float32Array(this.numJoints));
     this.subtractDefault = Boolean(config.subtract_default);
+    this.biased = Boolean(config.biased);
     this.defaultJointPos = this.normalizeDefaultJointPos(config.default_joint_pos);
+    this.encoderBias = this.normalizeEncoderBias(config.encoder_bias);
     this.scale = this.normalizeScale(config.scale);
   }
 
@@ -236,10 +240,21 @@ export class JointPos extends ObservationBase {
       for (let i = 0; i < this.numJoints; i++) {
         const adr = this.qposAdr[i];
         out[i] = qpos !== undefined ? qpos[adr] : 0.0;
+        if (this.biased && this.encoderBias.length > i) {
+          out[i] += this.encoderBias[i];
+        }
       }
       return out;
     }
-    return state?.jointPos ?? new Float32Array(this.numJoints);
+    const source = state?.jointPos ?? new Float32Array(this.numJoints);
+    if (!this.biased) {
+      return source;
+    }
+    const out = new Float32Array(this.numJoints);
+    for (let i = 0; i < this.numJoints; i++) {
+      out[i] = (source[i] ?? 0.0) + (this.encoderBias[i] ?? 0.0);
+    }
+    return out;
   }
 
   private getJointNames(config: ObservationConfig): string[] | null {
@@ -259,6 +274,19 @@ export class JointPos extends ObservationBase {
     const output = new Float32Array(this.numJoints);
     for (let i = 0; i < this.numJoints; i++) {
       output[i] = defaults[i] ?? 0.0;
+    }
+    return output;
+  }
+
+  private normalizeEncoderBias(values: unknown): Float32Array {
+    const explicit = normalizeVector(values, this.numJoints, 0.0);
+    if (explicit) {
+      return explicit;
+    }
+    const bias = this.runner.getEncoderBias();
+    const output = new Float32Array(this.numJoints);
+    for (let i = 0; i < this.numJoints; i++) {
+      output[i] = bias[i] ?? 0.0;
     }
     return output;
   }
@@ -1082,6 +1110,7 @@ export class BuiltinSensor extends ObservationBase {
     const resolved = this.resolveSensor(mjModel, this.sensorName);
     this.sensorAdr = resolved.adr;
     this.sensorDim = resolved.dim;
+    console.log(`[PolicyRunner] BuiltinSensor "${this.sensorName}": dim ${this.sensorDim}`);
     this.historySteps = Math.max(1, Math.floor((config.history_steps as number | undefined) ?? 1));
     this.history = Array.from({ length: this.historySteps }, () => new Float32Array(this.sensorDim));
     this.scale = normalizeScale(config.scale, this.sensorDim, 1.0);

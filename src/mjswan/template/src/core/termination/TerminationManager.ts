@@ -6,6 +6,7 @@ export type TerminationResult = {
   done: boolean;
   terminated: boolean;
   truncated: boolean;
+  reasons: string[];
 };
 
 export class TerminationManager {
@@ -37,9 +38,11 @@ export class TerminationManager {
   evaluate(state: PolicyState): TerminationResult {
     let terminated = false;
     let truncated = false;
+    const reasons: string[] = [];
 
-    for (const { term, isTimeOut } of this.terms) {
+    for (const { name, term, isTimeOut } of this.terms) {
       if (term.evaluate(state)) {
+        reasons.push(name);
         if (isTimeOut) {
           truncated = true;
         } else {
@@ -52,6 +55,7 @@ export class TerminationManager {
       done: terminated || truncated,
       terminated,
       truncated,
+      reasons,
     };
   }
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import mujoco
@@ -680,9 +681,15 @@ def _attach_tracking_motion(
 
     from .wandb_utils import fetch_motion_npz_from_wandb_run
 
-    if run_path not in cache:
-        cache[run_path] = fetch_motion_npz_from_wandb_run(run_path)
-    motion_name, payload = cache[run_path]
+    motion_file = getattr(tracking_motion_term, "motion_file", None)
+    motion_path = Path(motion_file).expanduser() if motion_file else None
+    if motion_path is not None and motion_path.is_file():
+        motion_name = motion_path.stem or "motion"
+        payload = motion_path.read_bytes()
+    else:
+        if run_path not in cache:
+            cache[run_path] = fetch_motion_npz_from_wandb_run(run_path)
+        motion_name, payload = cache[run_path]
 
     motion = MotionConfig(
         name=motion_name,

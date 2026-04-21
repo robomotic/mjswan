@@ -3,6 +3,16 @@ import { TrackingCommand } from '../command/TrackingCommand';
 import { TerminationBase, type TerminationConfig } from './TerminationBase';
 import type { PolicyState } from '../policy/types';
 
+function getBodyIdByNameAnchorOri(mjModel: import('mujoco').MjModel, bodyName: string): number {
+  for (let i = 0; i < mjModel.nbody; i++) {
+    const name = mjModel.body(i).name;
+    if (name === bodyName || name.endsWith(`/${bodyName}`)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 function normalizeQuatAnchorOri(quat: ArrayLike<number>): [number, number, number, number] {
   const length = Math.hypot(quat[0] ?? 1, quat[1] ?? 0, quat[2] ?? 0, quat[3] ?? 0) || 1.0;
   return [
@@ -45,19 +55,27 @@ export class BadAnchorOri extends TerminationBase {
     this.threshold = (config.params?.threshold as number | undefined) ?? Infinity;
   }
 
-  evaluate(state: PolicyState): boolean {
-    const rootQuat = state.rootQuat;
+  evaluate(_state: PolicyState): boolean {
     const tracking = getCommandManager().getTerm('motion');
-    if (!(tracking instanceof TrackingCommand) || !tracking.isReady() || !rootQuat || rootQuat.length < 4) {
+    const context = getCommandManager().getContext();
+    const mjModel = context?.mjModel ?? null;
+    const mjData = context?.mjData ?? null;
+    if (!(tracking instanceof TrackingCommand) || !tracking.isReady() || !mjModel || !mjData) {
       return false;
     }
     const anchorQuat = tracking.getAnchorQuat();
-    if (!anchorQuat || anchorQuat.length < 4) {
+    const anchorName = tracking.getAnchorBodyName();
+    if (!anchorQuat || anchorQuat.length < 4 || !anchorName) {
       return false;
     }
+    const anchorId = getBodyIdByNameAnchorOri(mjModel, anchorName);
+    if (anchorId < 0) {
+      return false;
+    }
+    const currentAnchorQuat = mjData.xquat.slice(anchorId * 4, anchorId * 4 + 4);
     const gravity: [number, number, number] = [0.0, 0.0, -1.0];
     const motionGravity = quatApplyInvAnchorOri(anchorQuat, gravity);
-    const robotGravity = quatApplyInvAnchorOri(rootQuat, gravity);
+    const robotGravity = quatApplyInvAnchorOri(currentAnchorQuat, gravity);
     return Math.abs(motionGravity[2] - robotGravity[2]) > this.threshold;
   }
 }

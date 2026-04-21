@@ -3,6 +3,16 @@ import { TrackingCommand } from '../command/TrackingCommand';
 import { TerminationBase, type TerminationConfig } from './TerminationBase';
 import type { PolicyState } from '../policy/types';
 
+function getBodyIdByName(mjModel: import('mujoco').MjModel, bodyName: string): number {
+  for (let i = 0; i < mjModel.nbody; i++) {
+    const name = mjModel.body(i).name;
+    if (name === bodyName || name.endsWith(`/${bodyName}`)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 export class BadAnchorPosZOnly extends TerminationBase {
   private readonly threshold: number;
 
@@ -11,16 +21,24 @@ export class BadAnchorPosZOnly extends TerminationBase {
     this.threshold = (config.params?.threshold as number | undefined) ?? Infinity;
   }
 
-  evaluate(state: PolicyState): boolean {
-    const rootPos = state.rootPos;
+  evaluate(_state: PolicyState): boolean {
     const tracking = getCommandManager().getTerm('motion');
-    if (!(tracking instanceof TrackingCommand) || !tracking.isReady() || !rootPos || rootPos.length < 3) {
+    const context = getCommandManager().getContext();
+    const mjModel = context?.mjModel ?? null;
+    const mjData = context?.mjData ?? null;
+    if (!(tracking instanceof TrackingCommand) || !tracking.isReady() || !mjModel || !mjData) {
       return false;
     }
     const anchorPos = tracking.getAnchorPos();
-    if (!anchorPos || anchorPos.length < 3) {
+    const anchorName = tracking.getAnchorBodyName();
+    if (!anchorPos || anchorPos.length < 3 || !anchorName) {
       return false;
     }
-    return Math.abs(anchorPos[2] - rootPos[2]) > this.threshold;
+    const anchorId = getBodyIdByName(mjModel, anchorName);
+    if (anchorId < 0) {
+      return false;
+    }
+    const currentAnchorZ = mjData.xpos[anchorId * 3 + 2] ?? 0.0;
+    return Math.abs(anchorPos[2] - currentAnchorZ) > this.threshold;
   }
 }
