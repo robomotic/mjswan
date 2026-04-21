@@ -388,6 +388,7 @@ class TestSaveWebPolicyJson:
             {
                 "name": "Spin Kick",
                 "path": "policy_spin_kick.npz",
+                "fps": 50.0,
                 "anchor_body_name": "torso_link",
                 "body_names": ["pelvis", "torso_link"],
                 "dataset_joint_names": ["joint_a"],

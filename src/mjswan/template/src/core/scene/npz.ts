@@ -9,7 +9,7 @@ async function inflateRaw(compressed: Uint8Array): Promise<Uint8Array> {
   const ds = new DecompressionStream('deflate-raw');
   const writer = ds.writable.getWriter();
   const reader = ds.readable.getReader();
-  writer.write(compressed);
+  writer.write(compressed as Uint8Array<ArrayBuffer>);
   writer.close();
   const chunks: Uint8Array[] = [];
   let totalLen = 0;
@@ -89,7 +89,7 @@ function parseNpyBuffer(buffer: Uint8Array): NpzEntry {
     if (needsSwap) float32Data = swapEndian32(float32Data);
   } else if (dtype === 'f8') {
     let f64 = new Float64Array(
-      rawData.buffer,
+      rawData.buffer as ArrayBuffer,
       rawData.byteOffset,
       rawData.byteLength / 8,
     );
@@ -98,7 +98,7 @@ function parseNpyBuffer(buffer: Uint8Array): NpzEntry {
     for (let i = 0; i < f64.length; i++) float32Data[i] = f64[i];
   } else if (dtype === 'i4') {
     let i32 = new Int32Array(
-      rawData.buffer,
+      rawData.buffer as ArrayBuffer,
       rawData.byteOffset,
       rawData.byteLength / 4,
     );
@@ -127,7 +127,7 @@ function swapEndian32(arr: Float32Array): Float32Array {
   return out;
 }
 
-function swapEndian64(arr: Float64Array): Float64Array {
+function swapEndian64(arr: Float64Array<ArrayBufferLike>): Float64Array<ArrayBuffer> {
   const view = new DataView(arr.buffer, arr.byteOffset, arr.byteLength);
   const out = new Float64Array(arr.length);
   for (let i = 0; i < arr.length; i++) {
@@ -136,7 +136,7 @@ function swapEndian64(arr: Float64Array): Float64Array {
   return out;
 }
 
-function swapEndianI32(arr: Int32Array): Int32Array {
+function swapEndianI32(arr: Int32Array<ArrayBufferLike>): Int32Array<ArrayBuffer> {
   const view = new DataView(arr.buffer, arr.byteOffset, arr.byteLength);
   const out = new Int32Array(arr.length);
   for (let i = 0; i < arr.length; i++) {
@@ -169,16 +169,44 @@ export async function loadNpz(url: string): Promise<NpzData> {
     }
 
     const compressionMethod = bytes[offset + 8] | (bytes[offset + 9] << 8);
-    const compressedSize =
-      bytes[offset + 18] |
+    const uncompressedSizeRaw =
+      (bytes[offset + 22] |
+      (bytes[offset + 23] << 8) |
+      (bytes[offset + 24] << 16) |
+      (bytes[offset + 25] << 24)) >>> 0;
+    let compressedSize =
+      (bytes[offset + 18] |
       (bytes[offset + 19] << 8) |
       (bytes[offset + 20] << 16) |
-      (bytes[offset + 21] << 24);
+      (bytes[offset + 21] << 24)) >>> 0;
     const fileNameLen = bytes[offset + 26] | (bytes[offset + 27] << 8);
     const extraLen = bytes[offset + 28] | (bytes[offset + 29] << 8);
 
     const fileNameBytes = bytes.slice(offset + 30, offset + 30 + fileNameLen);
     let fileName = new TextDecoder().decode(fileNameBytes);
+
+    // Handle ZIP64: sentinel value 0xFFFFFFFF means actual size is in extra field
+    if (compressedSize === 0xffffffff || uncompressedSizeRaw === 0xffffffff) {
+      const extraStart = offset + 30 + fileNameLen;
+      let ep = extraStart;
+      while (ep + 4 <= extraStart + extraLen) {
+        const tag = bytes[ep] | (bytes[ep + 1] << 8);
+        const sz = bytes[ep + 2] | (bytes[ep + 3] << 8);
+        if (tag === 0x0001) {
+          let fp = ep + 4;
+          if (uncompressedSizeRaw === 0xffffffff && fp + 8 <= ep + 4 + sz) {
+            fp += 8; // skip uncompressed size (not needed)
+          }
+          if (compressedSize === 0xffffffff && fp + 8 <= ep + 4 + sz) {
+            const lo = (bytes[fp] | (bytes[fp+1]<<8) | (bytes[fp+2]<<16) | (bytes[fp+3]<<24)) >>> 0;
+            const hi = (bytes[fp+4] | (bytes[fp+5]<<8) | (bytes[fp+6]<<16) | (bytes[fp+7]<<24)) >>> 0;
+            compressedSize = hi * 0x100000000 + lo;
+          }
+          break;
+        }
+        ep += 4 + sz;
+      }
+    }
 
     const dataStart = offset + 30 + fileNameLen + extraLen;
     const rawEntry = bytes.slice(dataStart, dataStart + compressedSize);
