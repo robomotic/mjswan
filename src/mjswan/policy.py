@@ -197,6 +197,7 @@ class PolicyHandle:
         *,
         name: str,
         source: str,
+        fps: float = 50.0,
         anchor_body_name: str,
         body_names: tuple[str, ...] | list[str],
         dataset_joint_names: list[str] | None = None,
@@ -206,6 +207,7 @@ class PolicyHandle:
         motion = MotionConfig(
             name=name,
             source=source,
+            fps=fps,
             anchor_body_name=anchor_body_name,
             body_names=tuple(body_names),
             dataset_joint_names=(
@@ -233,6 +235,7 @@ class PolicyHandle:
         run_id: str | None = None,
         entity: str | None = None,
         project: str | None = None,
+        fps: float = 50.0,
         anchor_body_name: str,
         body_names: tuple[str, ...] | list[str],
         dataset_joint_names: list[str] | None = None,
@@ -251,6 +254,7 @@ class PolicyHandle:
         motion = MotionConfig(
             name=name or motion_name,
             data=payload,
+            fps=fps,
             anchor_body_name=anchor_body_name,
             body_names=tuple(body_names),
             dataset_joint_names=(

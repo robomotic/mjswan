@@ -28,6 +28,9 @@ class MotionConfig:
     dataset_joint_names: list[str] | None = None
     """Joint ordering present in the motion dataset."""
 
+    fps: float = 50.0
+    """Playback frame rate (Hz). Used as ``sampleHz`` in ``TrackingCommand``."""
+
     data: bytes | None = None
     """Optional in-memory ``.npz`` payload, used for downloaded W&B artifacts."""
 
@@ -49,6 +52,7 @@ class MotionConfig:
         data: dict[str, Any] = {
             "name": self.name,
             "path": path,
+            "fps": self.fps,
             "anchor_body_name": self.anchor_body_name,
             "body_names": list(self.body_names),
         }

@@ -437,7 +437,7 @@ function ControlPanel(props: ControlPanelProps) {
                   size="xs"
                   radius="xs"
                   searchable
-                  clearable={false}
+                  clearable
                   styles={{
                     input: { minHeight: '1.625rem', height: '1.625rem', padding: '0.5em' },
                   }}

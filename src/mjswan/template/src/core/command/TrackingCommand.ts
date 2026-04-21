@@ -1,17 +1,13 @@
 import * as THREE from 'three';
-import JSZip from 'jszip';
 
 import { getPosition, getQuaternion } from '../scene/scene';
+import { type NpzEntry, loadNpz } from '../scene/npz';
 import type { CommandConfigEntry, CommandTerm, CommandTermContext, CommandUiConfig } from './types';
-
-type ParsedNpy = {
-  data: Float32Array | Float64Array;
-  shape: number[];
-};
 
 export type TrackingMotionConfig = {
   name: string;
   path: string;
+  fps: number;
   anchor_body_name: string;
   body_names: string[];
   dataset_joint_names?: string[];
@@ -38,78 +34,15 @@ function normalizeQuat(quat: ArrayLike<number>): Float32Array {
   ]);
 }
 
-function parseShape(raw: string): number[] {
-  const items = raw
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-  return items.map((item) => Number.parseInt(item, 10)).filter((value) => Number.isFinite(value));
-}
-
-function parseNpy(buffer: ArrayBuffer): ParsedNpy {
-  const view = new DataView(buffer);
-  const magic = new Uint8Array(buffer, 0, 6);
-  const magicText = String.fromCharCode(...magic);
-  if (magicText !== '\u0093NUMPY') {
-    throw new Error('Unsupported .npy header');
-  }
-  const major = view.getUint8(6);
-  const headerLength = major >= 2 ? view.getUint32(8, true) : view.getUint16(8, true);
-  const headerOffset = major >= 2 ? 12 : 10;
-  const headerBytes = new Uint8Array(buffer, headerOffset, headerLength);
-  const header = new TextDecoder('latin1').decode(headerBytes);
-
-  const descrMatch = header.match(/'descr':\s*'([^']+)'/);
-  const fortranMatch = header.match(/'fortran_order':\s*(True|False)/);
-  const shapeMatch = header.match(/'shape':\s*\(([^)]*)\)/);
-  if (!descrMatch || !fortranMatch || !shapeMatch) {
-    throw new Error('Unsupported .npy metadata');
-  }
-  if (fortranMatch[1] !== 'False') {
-    throw new Error('Fortran-ordered arrays are not supported');
-  }
-
-  const descr = descrMatch[1];
-  const shape = parseShape(shapeMatch[1]);
-  const dataOffset = headerOffset + headerLength;
-
-  if (descr === '<f4' || descr === '|f4') {
-    return {
-      data: new Float32Array(buffer, dataOffset),
-      shape,
-    };
-  }
-  if (descr === '<f8' || descr === '|f8') {
-    return {
-      data: new Float64Array(buffer, dataOffset),
-      shape,
-    };
-  }
-  throw new Error(`Unsupported .npy dtype: ${descr}`);
-}
-
-function frameCount(shape: number[]): number {
-  return shape[0] ?? 0;
-}
-
-function frameWidth(shape: number[]): number {
-  if (shape.length <= 1) {
-    return 1;
-  }
-  return shape.slice(1).reduce((acc, value) => acc * value, 1);
-}
-
-function splitFrames(
-  array: ParsedNpy,
-): Float32Array[] {
-  const totalFrames = frameCount(array.shape);
-  const width = frameWidth(array.shape);
+function splitFrames(entry: NpzEntry): Float32Array[] {
+  const totalFrames = entry.shape[0] ?? 0;
+  const width = entry.shape.length <= 1 ? 1 : entry.shape.slice(1).reduce((acc, v) => acc * v, 1);
   const frames: Float32Array[] = [];
   for (let i = 0; i < totalFrames; i++) {
     const out = new Float32Array(width);
     const start = i * width;
     for (let j = 0; j < width; j++) {
-      out[j] = array.data[start + j] ?? 0.0;
+      out[j] = entry.data[start + j] ?? 0.0;
     }
     frames.push(out);
   }
@@ -137,7 +70,7 @@ export class TrackingCommand implements CommandTerm {
   private readonly context: CommandTermContext;
   private readonly motions: TrackingMotionConfig[];
   private readonly loadedMotions: Map<string, LoadedTrackingMotion>;
-  private readonly sampleHz: number;
+  private sampleHz: number;
   private readonly ghostRoot: THREE.Group | null;
   private readonly ghostBodies: Map<number, THREE.Group>;
   private readonly ghostData: import('mujoco').MjData | null;
@@ -387,40 +320,21 @@ export class TrackingCommand implements CommandTerm {
   }
 
   private async loadMotion(config: TrackingMotionConfig): Promise<LoadedTrackingMotion> {
-    const response = await fetch(config.path, { cache: 'force-cache' });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch motion asset: ${response.status}`);
+    this.sampleHz = config.fps;
+    const npz = await loadNpz(config.path);
+    const required = ['joint_pos', 'joint_vel', 'body_pos_w', 'body_quat_w', 'body_lin_vel_w', 'body_ang_vel_w'] as const;
+    for (const key of required) {
+      if (!npz[key]) {
+        throw new Error(`Motion asset is missing '${key}'`);
+      }
     }
-    const archive = await JSZip.loadAsync(await response.arrayBuffer());
-    const arrays = await Promise.all([
-      archive.file('joint_pos.npy')?.async('arraybuffer'),
-      archive.file('joint_vel.npy')?.async('arraybuffer'),
-      archive.file('body_pos_w.npy')?.async('arraybuffer'),
-      archive.file('body_quat_w.npy')?.async('arraybuffer'),
-      archive.file('body_lin_vel_w.npy')?.async('arraybuffer'),
-      archive.file('body_ang_vel_w.npy')?.async('arraybuffer'),
-    ]);
-    if (arrays.some((entry) => entry === undefined)) {
-      throw new Error('Motion asset is missing required arrays');
-    }
-
-    const jointPos = splitFrames(parseNpy(arrays[0]!));
-    const jointVel = splitFrames(parseNpy(arrays[1]!));
-    const bodyPosW = splitFrames(parseNpy(arrays[2]!));
-    const bodyQuatW = splitFrames(parseNpy(arrays[3]!));
-    const bodyLinVelW = splitFrames(parseNpy(arrays[4]!));
-    const bodyAngVelW = splitFrames(parseNpy(arrays[5]!));
-
-    return {
-      ...config,
-      jointPos,
-      jointVel,
-      bodyPosW,
-      bodyQuatW,
-      bodyLinVelW,
-      bodyAngVelW,
-      frameCount: jointPos.length,
-    };
+    const jointPos = splitFrames(npz['joint_pos']!);
+    const jointVel = splitFrames(npz['joint_vel']!);
+    const bodyPosW = splitFrames(npz['body_pos_w']!);
+    const bodyQuatW = splitFrames(npz['body_quat_w']!);
+    const bodyLinVelW = splitFrames(npz['body_lin_vel_w']!);
+    const bodyAngVelW = splitFrames(npz['body_ang_vel_w']!);
+    return { ...config, jointPos, jointVel, bodyPosW, bodyQuatW, bodyLinVelW, bodyAngVelW, frameCount: jointPos.length };
   }
 
   private resolveQposAdr(jointNames: string[]): number[] {
