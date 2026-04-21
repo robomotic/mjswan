@@ -96,6 +96,7 @@ assets/
 - `/` - Default project
 - `/{project-id}/` - Specific project
 - `?scene={name}&policy={name}` - Pre-select scene and policy
+- `?panel=0` - Start with the control panel hidden
 
 ## Core Architecture
 

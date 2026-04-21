@@ -1,22 +1,22 @@
 // @refresh reset
 
-import { Box, Collapse, Divider, Paper, ScrollArea } from "@mantine/core";
-import React from "react";
-import { useDisclosure } from "@mantine/hooks";
+import { Box, Collapse, Divider, Paper, ScrollArea, Tooltip } from '@mantine/core';
+import React from 'react';
+import { useDisclosure } from '@mantine/hooks';
 
 // Drag Utils
 interface DragEvents {
-  move: "touchmove" | "mousemove";
-  end: "touchend" | "mouseup";
+  move: 'touchmove' | 'mousemove';
+  end: 'touchend' | 'mouseup';
 }
-const touchEvents: DragEvents = { move: "touchmove", end: "touchend" };
-const mouseEvents: DragEvents = { move: "mousemove", end: "mouseup" };
+const touchEvents: DragEvents = { move: 'touchmove', end: 'touchend' };
+const mouseEvents: DragEvents = { move: 'mousemove', end: 'mouseup' };
 
 function isTouchEvent(event: TouchEvent | MouseEvent): event is TouchEvent {
-  return event.type === "touchmove";
+  return event.type === 'touchmove';
 }
 function isMouseEvent(event: TouchEvent | MouseEvent): event is MouseEvent {
-  return event.type === "mousemove";
+  return event.type === 'mousemove';
 }
 
 const FloatingPanelContext = React.createContext<null | {
@@ -43,9 +43,15 @@ const FloatingPanelContext = React.createContext<null | {
 export default function FloatingPanel({
   children,
   width,
+  visible = true,
+  onVisibleChange,
+  hiddenButtonTooltip,
 }: {
   children: string | React.ReactNode;
   width: string;
+  visible?: boolean;
+  onVisibleChange?: (visible: boolean) => void;
+  hiddenButtonTooltip?: string;
 }) {
   const panelWrapperRef = React.useRef<HTMLDivElement>(null);
   const [expanded, { toggle: toggleExpanded }] = useDisclosure(true);
@@ -153,7 +159,7 @@ export default function FloatingPanel({
     const state = dragInfo.current;
     const panel = panelWrapperRef.current;
     if (!panel) return;
-    if (event.type == "touchstart") {
+    if (event.type == 'touchstart') {
       event = event as React.TouchEvent<HTMLDivElement>;
       state.startClientX = event.touches[0].clientX;
       state.startClientY = event.touches[0].clientY;
@@ -164,7 +170,7 @@ export default function FloatingPanel({
     }
     state.startPosX = panel.offsetLeft;
     state.startPosY = panel.offsetTop;
-    const eventNames = event.type == "touchstart" ? touchEvents : mouseEvents;
+    const eventNames = event.type == 'touchstart' ? touchEvents : mouseEvents;
     function dragListener(event: MouseEvent | TouchEvent) {
       // Minimum motion.
       let deltaX = 0;
@@ -192,7 +198,7 @@ export default function FloatingPanel({
     window.addEventListener(
       eventNames.end,
       () => {
-        if (event.type == "touchstart") {
+        if (event.type == 'touchstart') {
           state.dragging = false;
         }
         window.removeEventListener(eventNames.move, dragListener);
@@ -200,6 +206,48 @@ export default function FloatingPanel({
       { once: true },
     );
   };
+
+  if (!visible) {
+    const showButton = (
+      <Box
+        component="button"
+        aria-label={hiddenButtonTooltip ?? 'Show controls'}
+        onClick={() => onVisibleChange?.(true)}
+        style={{
+          width: '0.85rem',
+          height: '0.85rem',
+          minWidth: '0.85rem',
+          minHeight: '0.85rem',
+          display: 'block',
+          padding: 0,
+          border: 'none',
+          borderRadius: '9999px',
+          background: 'rgba(255, 255, 255, 0.82)',
+          boxShadow: '0 0 0 1px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.18)',
+          cursor: 'pointer',
+        }}
+      />
+    );
+
+    return (
+      <Box
+        style={{
+          zIndex: 10,
+          position: 'absolute',
+          top: '1em',
+          right: '1em',
+        }}
+      >
+        {hiddenButtonTooltip ? (
+          <Tooltip label={hiddenButtonTooltip}>
+            <Box>{showButton}</Box>
+          </Tooltip>
+        ) : (
+            showButton
+        )}
+      </Box>
+    );
+  }
 
   return (
     <FloatingPanelContext.Provider
@@ -217,17 +265,17 @@ export default function FloatingPanel({
         radius="xs"
         shadow="0.1em 0 1em 0 rgba(0,0,0,0.1)"
         style={{
-          boxSizing: "border-box",
+          boxSizing: 'border-box',
           width: width,
           zIndex: 10,
-          position: "absolute",
-          top: "1em",
-          right: "1em",
+          position: 'absolute',
+          top: '1em',
+          right: '1em',
           margin: 0,
-          "& .expandIcon": {
-            transform: "rotate(0)",
+          '& .expandIcon': {
+            transform: 'rotate(0)',
           },
-          overflow: "hidden",
+          overflow: 'hidden',
         }}
         ref={panelWrapperRef}
       >
@@ -249,16 +297,16 @@ FloatingPanel.Handle = function FloatingPanelHandle({
     <>
       <Box
         style={{
-          borderRadius: "0.2em 0.2em 0 0",
-          lineHeight: "1.5em",
-          cursor: "pointer",
-          position: "relative",
+          borderRadius: '0.2em 0.2em 0 0',
+          lineHeight: '1.5em',
+          cursor: 'pointer',
+          position: 'relative',
           fontWeight: 400,
-          userSelect: "none",
-          display: "flex",
-          alignItems: "center",
-          padding: "0 0.75em",
-          height: "2.75em",
+          userSelect: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          padding: '0 0.75em',
+          height: '2.75em',
         }}
         onClick={() => {
           const state = panelContext.dragInfo.current;
