@@ -59,6 +59,8 @@ interface AppConfig {
   projects: ProjectConfig[];
 }
 
+const PANEL_QUERY_PARAM = 'panel';
+
 function getProjectIdFromLocation(): string | null {
   const base = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '/');
   const pathname = window.location.pathname;
@@ -225,11 +227,12 @@ function pickMotion(policy: PolicyConfig | null, motionQuery: string | null): st
   return found?.name ?? fallback.name;
 }
 
-function updateUrlParams(
-  projectId: string | null,
-  sceneName: string | null,
-  policyName: string | null
-) {
+function isPanelVisibleFromSearch(search: string): boolean {
+  const params = new URLSearchParams(search);
+  return params.get(PANEL_QUERY_PARAM) !== '0';
+}
+
+function buildProjectPath(projectId: string | null): string {
   const base = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '/');
   const normalizedBase = base.replace(/^\//g, '').replace(/\/+$/g, '');
 
@@ -238,15 +241,41 @@ function updateUrlParams(
     pathname += `${projectId}/`;
   }
 
-  const params = new URLSearchParams();
+  return pathname;
+}
+
+function updateUrlParams({
+  projectId,
+  sceneName,
+  policyName,
+  panelVisible,
+}: {
+  projectId: string | null;
+  sceneName: string | null;
+  policyName: string | null;
+  panelVisible: boolean;
+}) {
+  const pathname = buildProjectPath(projectId);
+  const params = new URLSearchParams(window.location.search);
+
   if (sceneName) {
     params.set('scene', sceneName);
+  } else {
+    params.delete('scene');
   }
   if (policyName) {
     params.set('policy', policyName);
+  } else {
+    params.delete('policy');
+  }
+  if (panelVisible) {
+    params.delete(PANEL_QUERY_PARAM);
+  } else {
+    params.set(PANEL_QUERY_PARAM, '0');
   }
 
-  const newUrl = pathname + (params.toString() ? '?' + params.toString() : '');
+  const search = params.toString();
+  const newUrl = pathname + (search ? `?${search}` : '') + window.location.hash;
   window.history.replaceState({}, '', newUrl);
 }
 
@@ -260,6 +289,9 @@ function AppContent() {
   const [error, setError] = useState<string | null>(null);
   const [selectedSplat, setSelectedSplat] = useState<string | null>(null);
   const [customSplatUrl, setCustomSplatUrl] = useState<string | null>(null);
+  const [panelVisible, setPanelVisible] = useState(() =>
+    isPanelVisibleFromSearch(window.location.search)
+  );
   const runtimeRef = useRef<mjswanRuntime | null>(null);
   const { showLoading, hideLoading } = useLoading();
 
@@ -442,6 +474,20 @@ function AppContent() {
     }
   }, [resolvedSplatConfig, customSplatUrl]);
 
+  const syncUrlState = useCallback((next: {
+    projectId?: string | null;
+    sceneName?: string | null;
+    policyName?: string | null;
+    panelVisible?: boolean;
+  }) => {
+    updateUrlParams({
+      projectId: next.projectId ?? currentProject?.id ?? null,
+      sceneName: next.sceneName ?? currentScene?.name ?? null,
+      policyName: next.policyName ?? selectedPolicy,
+      panelVisible: next.panelVisible ?? panelVisible,
+    });
+  }, [currentProject?.id, currentScene?.name, selectedPolicy, panelVisible]);
+
   const handleProjectChange = useCallback(
     (value: string | null) => {
       if (!config || !value) {
@@ -456,13 +502,17 @@ function AppContent() {
       setCurrentProject(project);
       const nextScene = pickScene(project, null);
       setCurrentScene(nextScene);
-      const nextPolicy = nextScene?.policies?.[0]?.name ?? null;
+      const nextPolicy = nextScene ? pickPolicy(nextScene, null) : null;
       setSelectedPolicy(nextPolicy);
       const nextPolicyConfig = nextScene?.policies.find((policy) => policy.name === nextPolicy) ?? null;
       setSelectedMotion(pickMotion(nextPolicyConfig, null));
-      updateUrlParams(project.id, nextScene?.name ?? null, nextPolicy);
+      syncUrlState({
+        projectId: project.id,
+        sceneName: nextScene?.name ?? null,
+        policyName: nextPolicy,
+      });
     },
-    [config, showLoading]
+    [config, showLoading, syncUrlState]
   );
 
   const handleSceneChange = useCallback(
@@ -480,9 +530,13 @@ function AppContent() {
       setSelectedPolicy(nextPolicy);
       const nextPolicyConfig = scene.policies.find((policy) => policy.name === nextPolicy) ?? null;
       setSelectedMotion(pickMotion(nextPolicyConfig, null));
-      updateUrlParams(currentProject.id, value, nextPolicy);
+      syncUrlState({
+        projectId: currentProject.id,
+        sceneName: value,
+        policyName: nextPolicy,
+      });
     },
-    [currentProject, showLoading]
+    [currentProject, showLoading, syncUrlState]
   );
 
   const handlePolicyChange = useCallback(
@@ -493,9 +547,17 @@ function AppContent() {
       setSelectedPolicy(value);
       const nextPolicyConfig = currentScene?.policies.find((policy) => policy.name === value) ?? null;
       setSelectedMotion(pickMotion(nextPolicyConfig, null));
-      updateUrlParams(currentProject?.id ?? null, currentScene?.name ?? null, value);
+      syncUrlState({ policyName: value });
     },
-    [currentProject, currentScene, selectedPolicy, showLoading]
+    [selectedPolicy, showLoading, syncUrlState]
+  );
+
+  const handlePanelVisibleChange = useCallback(
+    (visible: boolean) => {
+      setPanelVisible(visible);
+      syncUrlState({ panelVisible: visible });
+    },
+    [syncUrlState]
   );
 
   const handleMotionChange = useCallback((value: string | null) => {
@@ -529,7 +591,9 @@ function AppContent() {
     <MantineProvider theme={theme} defaultColorScheme="auto">
       <div className="app">
         <Loader />
-<ControlPanel
+        <ControlPanel
+          visible={panelVisible}
+          onVisibleChange={handlePanelVisibleChange}
           projects={projectOptions}
           projectValue={projectValue}
           projectLabel={currentProject?.name ?? 'mjswan'}

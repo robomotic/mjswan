@@ -1,7 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Anchor, Box, Button, Checkbox, Divider, Image, Menu, Modal, Select, Slider, Stack, Text, Tooltip } from '@mantine/core';
+import {
+  ActionIcon,
+  Anchor,
+  Box,
+  Button,
+  Checkbox,
+  Divider,
+  Image,
+  Menu,
+  Modal,
+  Select,
+  Slider,
+  Stack,
+  Text,
+  Tooltip,
+} from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconChevronDown, IconRefresh } from '@tabler/icons-react';
+import { IconChevronDown, IconRefresh, IconX } from '@tabler/icons-react';
 import type { SplatConfig } from '../core/scene/splat';
 import { MJSWAN_VERSION, GITHUB_CONTRIBUTORS, type Contributor } from '../Version';
 import FloatingPanel from './FloatingPanel';
@@ -20,6 +35,8 @@ export interface SelectOption {
 }
 
 interface ControlPanelProps {
+  visible: boolean;
+  onVisibleChange: (visible: boolean) => void;
   projects: SelectOption[];
   projectValue: string | null;
   projectLabel: string;
@@ -49,6 +66,22 @@ interface ControlPanelProps {
   commandsEnabled?: boolean;
   /** Callback when reset button is pressed */
   onReset?: () => void;
+}
+
+function isEditableElement(element: Element | null): boolean {
+  if (!(element instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (element.isContentEditable) {
+    return true;
+  }
+
+  return (
+    element.closest(
+      'input, textarea, select, [contenteditable], [role="textbox"], [role="searchbox"], [role="combobox"]'
+    ) !== null
+  );
 }
 
 /**
@@ -121,6 +154,8 @@ function SliderControl({
 
 function ControlPanel(props: ControlPanelProps) {
   const {
+    visible,
+    onVisibleChange,
     projects,
     projectValue,
     projectLabel,
@@ -193,6 +228,34 @@ function ControlPanel(props: ControlPanelProps) {
       commandManager.removeEventListener(updateCommands);
     };
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.repeat ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.key.toLowerCase() !== 'c'
+      ) {
+        return;
+      }
+
+      const target = event.target instanceof Element ? event.target : document.activeElement;
+      if (isEditableElement(target)) {
+        return;
+      }
+
+      event.preventDefault();
+      onVisibleChange(!visible);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [visible, onVisibleChange]);
 
   // Handle slider value changes
   const handleSliderChange = useCallback((id: string, value: number) => {
@@ -275,12 +338,19 @@ function ControlPanel(props: ControlPanelProps) {
         </Box>
       </Stack>
     </Modal>
-    <FloatingPanel width="20em">
+    <FloatingPanel
+      width="20em"
+      visible={visible}
+      onVisibleChange={onVisibleChange}
+      hiddenButtonTooltip="Show controls (C)"
+    >
       <FloatingPanel.Handle>
         <Tooltip label={`mjswan ${MJSWAN_VERSION}`}>
           <Box
             component="a"
             onClick={(e) => { e.stopPropagation(); openAbout(); }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
             style={{ position: "absolute", cursor: "pointer", display: "flex", top: "0.8em", left: "0.9em" }}
           >
             <Image src="./logo.svg" style={{ width: "1.2em", height: "auto" }} />
@@ -299,16 +369,28 @@ function ControlPanel(props: ControlPanelProps) {
             }}
             pt="0.1em"
           >
-            <span style={{ flexGrow: 1 }}>{projectLabel}</span>
+            <span
+              style={{
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {projectLabel}
+            </span>
             {projects.length > 1 && (
               <Menu position="bottom-start" offset={5}>
                 <Menu.Target>
                   <Box
                     onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
                     style={{
                       cursor: "pointer",
                       display: "flex",
                       alignItems: "center",
+                      flexShrink: 0,
                     }}
                   >
                     <IconChevronDown size={16} />
@@ -343,6 +425,22 @@ function ControlPanel(props: ControlPanelProps) {
             {projectLabel}
           </Box>
         </FloatingPanel.HideWhenExpanded>
+        <Tooltip label="Hide controls (C)">
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            size="sm"
+            aria-label="Hide controls"
+            onClick={(event) => {
+              event.stopPropagation();
+              onVisibleChange(false);
+            }}
+            onMouseDown={(event) => event.stopPropagation()}
+            onTouchStart={(event) => event.stopPropagation()}
+          >
+            <IconX size={14} />
+          </ActionIcon>
+        </Tooltip>
       </FloatingPanel.Handle>
       <FloatingPanel.Contents>
         <Box pt="0.375em">

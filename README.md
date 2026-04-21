@@ -2,7 +2,7 @@
   <img src="assets/banner.svg" alt="mjswan" width="60%">
 </p>
 <p align="center">
-  <strong><em>Real-time Interactive AI Robot Simulation in Your Browser</em></strong>
+  <strong><em>Real-time Interactive RL Simulation in Your Browser</em></strong>
 </p>
 
 <p align="center">
@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  mjswan is a powerful framework for creating interactive MuJoCo simulations with real-time policy control, running entirely in the browser. Built on top of <a href="https://github.com/google-deepmind/mujoco/tree/main/wasm">mujoco wasm</a>, <a href="https://github.com/microsoft/onnxruntime">onnxruntime</a>, and <a href="https://github.com/mrdoob/three.js/">three.js</a>, it enables easy sharing of AI robot simulation demos as static sites, perfect for GitHub Pages hosting.
+  mjswan is a powerful framework for creating interactive MuJoCo simulations with real-time policy control, running entirely in the browser. Built on top of <a href="https://github.com/google-deepmind/mujoco/tree/main/wasm">mujoco wasm</a>, <a href="https://github.com/microsoft/onnxruntime">onnxruntime</a>, and <a href="https://github.com/mrdoob/three.js/">three.js</a>, it enables easy sharing of RL simulation demos as static sites, perfect for GitHub Pages hosting.
 </p>
 
 <p align="center">
@@ -76,7 +76,7 @@ model_path = os.path.join(os.path.dirname(mujoco.__file__), "testdata", "model.x
 mjspec = mujoco.MjSpec.from_file(model_path)
 
 builder = mjswan.Builder()
-builder.add_project(name="Sanity Check").add_scene(name="Humanoid", spec=mjspec)
+builder.add_project(name="Sanity Check").add_scene(name="Test Model", spec=mjspec)
 app = builder.build()
 app.launch()
 ```
