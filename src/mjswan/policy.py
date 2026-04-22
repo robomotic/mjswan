@@ -192,6 +192,13 @@ class PolicyHandle:
         self._config.metadata[key] = value
         return self
 
+    def _append_motion(self, motion: MotionConfig) -> MotionHandle:
+        if motion.default:
+            for existing in self._config.motions:
+                existing.default = False
+        self._config.motions.append(motion)
+        return MotionHandle(motion, self)
+
     def add_motion(
         self,
         *,
@@ -221,11 +228,7 @@ class PolicyHandle:
             ),
             default=default,
         )
-        if default:
-            for existing in self._config.motions:
-                existing.default = False
-        self._config.motions.append(motion)
-        return MotionHandle(motion, self)
+        return self._append_motion(motion)
 
     def add_motion_from_wandb(
         self,

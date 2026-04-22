@@ -317,7 +317,7 @@ export class TrackingCommand implements CommandTerm {
 
   dispose(): void {
     if (this.ghostRoot) {
-      this.context.scene.remove(this.ghostRoot);
+      this.ghostRoot.parent?.remove(this.ghostRoot);
       this.ghostRoot.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
           if (Array.isArray(obj.material)) {
@@ -426,7 +426,7 @@ export class TrackingCommand implements CommandTerm {
       this.ghostBodies.set(numericBodyId, clone);
       root.add(clone);
     }
-    this.context.scene.add(root);
+    (this.context.mujocoRoot ?? this.context.scene).add(root);
     return root;
   }
 
@@ -457,14 +457,20 @@ export class TrackingCommand implements CommandTerm {
     }
     const jointPos = splitFrames(npz['joint_pos']!);
     const jointVel = splitFrames(npz['joint_vel']!);
-    const bodyPosW = this.selectMotionBodyFrames(splitFrames(npz['body_pos_w']!), config.body_names, 3);
-    const bodyQuatW = this.selectMotionBodyFrames(splitFrames(npz['body_quat_w']!), config.body_names, 4);
-    const bodyLinVelW = this.selectMotionBodyFrames(splitFrames(npz['body_lin_vel_w']!), config.body_names, 3);
-    const bodyAngVelW = this.selectMotionBodyFrames(splitFrames(npz['body_ang_vel_w']!), config.body_names, 3);
+    const sourceBodyNames = npz['body_names']?.strings ?? null;
+    const bodyPosW = this.selectMotionBodyFrames(splitFrames(npz['body_pos_w']!), config.body_names, 3, sourceBodyNames);
+    const bodyQuatW = this.selectMotionBodyFrames(splitFrames(npz['body_quat_w']!), config.body_names, 4, sourceBodyNames);
+    const bodyLinVelW = this.selectMotionBodyFrames(splitFrames(npz['body_lin_vel_w']!), config.body_names, 3, sourceBodyNames);
+    const bodyAngVelW = this.selectMotionBodyFrames(splitFrames(npz['body_ang_vel_w']!), config.body_names, 3, sourceBodyNames);
     return { ...config, jointPos, jointVel, bodyPosW, bodyQuatW, bodyLinVelW, bodyAngVelW, frameCount: jointPos.length };
   }
 
-  private selectMotionBodyFrames(frames: Float32Array[], bodyNames: string[], stride: number): Float32Array[] {
+  private selectMotionBodyFrames(
+    frames: Float32Array[],
+    bodyNames: string[],
+    stride: number,
+    sourceBodyNames: string[] | null = null,
+  ): Float32Array[] {
     const mjModel = this.context.mjModel;
     const first = frames[0];
     if (!mjModel || !first || bodyNames.length === 0) {
@@ -476,11 +482,20 @@ export class TrackingCommand implements CommandTerm {
       return frames;
     }
 
-    const rootBodyId = this.findBodyIdByName(bodyNames[0]);
-    const bodyIds = bodyNames.map((name) => this.findBodyIdByName(name));
-    const bodySourceIndices = bodyIds.map((id) => id - rootBodyId);
-    if (rootBodyId < 0 || bodySourceIndices.some((id) => id < 0 || id >= sourceBodyCount)) {
-      console.warn('[TrackingCommand] Could not map all motion body names to MuJoCo body ids; using raw body frames.');
+    let bodySourceIndices: number[];
+    if (sourceBodyNames !== null) {
+      // Use the npz's own body-name manifest for unambiguous index lookup.
+      bodySourceIndices = bodyNames.map((name) => sourceBodyNames.indexOf(name));
+    } else {
+      // Fall back: assume source bodies are laid out in mjModel body-ID order
+      // starting from the first body in body_names.
+      const rootBodyId = this.findBodyIdByName(bodyNames[0]);
+      const bodyIds = bodyNames.map((name) => this.findBodyIdByName(name));
+      bodySourceIndices = bodyIds.map((id) => id - rootBodyId);
+    }
+
+    if (bodySourceIndices.some((idx) => idx < 0 || idx >= sourceBodyCount)) {
+      console.warn('[TrackingCommand] Could not map all motion body names to source body indices; using raw body frames.');
       return frames;
     }
 

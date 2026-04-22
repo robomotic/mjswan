@@ -615,8 +615,16 @@ class Builder:
                             with open(target, "w") as f:
                                 json.dump(data, f, indent=2)
 
+                        seen_motion_files: set[str] = set()
                         for motion in policy.motions:
                             filename = self._motion_filename(policy.name, motion.name)
+                            if filename in seen_motion_files:
+                                raise ValueError(
+                                    f"Motion filename collision for policy '{policy.name}': "
+                                    f"'{motion.name}' sanitizes to '{filename}' which is already used. "
+                                    "Rename one of the motions to avoid this conflict."
+                                )
+                            seen_motion_files.add(filename)
                             target = scene_dir / filename
                             if motion.data is not None:
                                 target.write_bytes(motion.data)

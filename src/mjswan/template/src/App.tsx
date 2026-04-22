@@ -60,6 +60,7 @@ interface AppConfig {
 }
 
 const PANEL_QUERY_PARAM = 'panel';
+const REF_QUERY_PARAM = 'ref';
 
 function getProjectIdFromLocation(): string | null {
   const base = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '/');
@@ -232,6 +233,11 @@ function isPanelVisibleFromSearch(search: string): boolean {
   return params.get(PANEL_QUERY_PARAM) !== '0';
 }
 
+function isRefVisibleFromSearch(search: string): boolean {
+  const params = new URLSearchParams(search);
+  return params.get(REF_QUERY_PARAM) !== '0';
+}
+
 function buildProjectPath(projectId: string | null): string {
   const base = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '/');
   const normalizedBase = base.replace(/^\//g, '').replace(/\/+$/g, '');
@@ -249,11 +255,13 @@ function updateUrlParams({
   sceneName,
   policyName,
   panelVisible,
+  showReference,
 }: {
   projectId: string | null;
   sceneName: string | null;
   policyName: string | null;
   panelVisible: boolean;
+  showReference: boolean;
 }) {
   const pathname = buildProjectPath(projectId);
   const params = new URLSearchParams(window.location.search);
@@ -273,6 +281,11 @@ function updateUrlParams({
   } else {
     params.set(PANEL_QUERY_PARAM, '0');
   }
+  if (showReference) {
+    params.delete(REF_QUERY_PARAM);
+  } else {
+    params.set(REF_QUERY_PARAM, '0');
+  }
 
   const search = params.toString();
   const newUrl = pathname + (search ? `?${search}` : '') + window.location.hash;
@@ -285,7 +298,9 @@ function AppContent() {
   const [currentScene, setCurrentScene] = useState<SceneConfig | null>(null);
   const [selectedPolicy, setSelectedPolicy] = useState<string | null>(null);
   const [selectedMotion, setSelectedMotion] = useState<string | null>(null);
-  const [showReferenceMotion, setShowReferenceMotion] = useState(true);
+  const [showReferenceMotion, setShowReferenceMotion] = useState(() =>
+    isRefVisibleFromSearch(window.location.search)
+  );
   const [error, setError] = useState<string | null>(null);
   const [selectedSplat, setSelectedSplat] = useState<string | null>(null);
   const [customSplatUrl, setCustomSplatUrl] = useState<string | null>(null);
@@ -479,14 +494,16 @@ function AppContent() {
     sceneName?: string | null;
     policyName?: string | null;
     panelVisible?: boolean;
+    showReference?: boolean;
   }) => {
     updateUrlParams({
       projectId: next.projectId ?? currentProject?.id ?? null,
       sceneName: next.sceneName ?? currentScene?.name ?? null,
       policyName: next.policyName ?? selectedPolicy,
       panelVisible: next.panelVisible ?? panelVisible,
+      showReference: next.showReference ?? showReferenceMotion,
     });
-  }, [currentProject?.id, currentScene?.name, selectedPolicy, panelVisible]);
+  }, [currentProject?.id, currentScene?.name, selectedPolicy, panelVisible, showReferenceMotion]);
 
   const handleProjectChange = useCallback(
     (value: string | null) => {
@@ -568,7 +585,8 @@ function AppContent() {
   const handleShowReferenceChange = useCallback((value: boolean) => {
     setShowReferenceMotion(value);
     runtimeRef.current?.setReferenceVisible(value);
-  }, []);
+    syncUrlState({ showReference: value });
+  }, [syncUrlState]);
 
   if (error) {
     return (

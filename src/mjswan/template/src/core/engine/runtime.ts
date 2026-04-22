@@ -550,11 +550,6 @@ export class mjswanRuntime {
           const postState = this.policyStateBuilder.build();
           const result = this.terminationManager.evaluate(postState);
           if (result.done) {
-            console.warn('[TerminationManager] reset triggered', {
-              terminated: result.terminated,
-              truncated: result.truncated,
-              reasons: result.reasons,
-            });
             this.resetSimulationState();
             this.terminationManager.reset();
             if (this.policyRunner) {
@@ -965,7 +960,6 @@ export class mjswanRuntime {
         terrainData: this.terrainData,
       });
     }
-    this.mujoco.mj_forward(this.mjModel, this.mjData);
     getCommandManager().resetTerms();
     if (this.onnxModule) {
       this.onnxInputDict = this.onnxModule.initInput();

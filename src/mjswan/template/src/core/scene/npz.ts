@@ -1,6 +1,7 @@
 export type NpzEntry = {
   shape: number[];
   data: Float32Array;
+  strings?: string[];
 };
 
 export type NpzData = Record<string, NpzEntry>;
@@ -106,6 +107,20 @@ function parseNpyBuffer(buffer: Uint8Array): NpzEntry {
     float32Data = new Float32Array(i32.length);
     for (let i = 0; i < i32.length; i++) float32Data[i] = i32[i];
   } else {
+    // Handle fixed-width byte-string dtype: |S<n>
+    const strMatch = descr.match(/^S(\d+)$/);
+    if (strMatch) {
+      const width = parseInt(strMatch[1], 10);
+      const count = rawData.length / width;
+      const decoder = new TextDecoder('utf-8');
+      const strings: string[] = [];
+      for (let i = 0; i < count; i++) {
+        const chunk = rawData.slice(i * width, (i + 1) * width);
+        const end = chunk.indexOf(0);
+        strings.push(decoder.decode(end >= 0 ? chunk.slice(0, end) : chunk));
+      }
+      return { shape, data: new Float32Array(0), strings };
+    }
     throw new Error(`Unsupported numpy dtype: ${descr}`);
   }
 

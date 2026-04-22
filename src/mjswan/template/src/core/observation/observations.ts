@@ -1110,7 +1110,6 @@ export class BuiltinSensor extends ObservationBase {
     const resolved = this.resolveSensor(mjModel, this.sensorName);
     this.sensorAdr = resolved.adr;
     this.sensorDim = resolved.dim;
-    console.log(`[PolicyRunner] BuiltinSensor "${this.sensorName}": dim ${this.sensorDim}`);
     this.historySteps = Math.max(1, Math.floor((config.history_steps as number | undefined) ?? 1));
     this.history = Array.from({ length: this.historySteps }, () => new Float32Array(this.sensorDim));
     this.scale = normalizeScale(config.scale, this.sensorDim, 1.0);

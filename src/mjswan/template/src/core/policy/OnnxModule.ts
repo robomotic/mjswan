@@ -105,10 +105,19 @@ export class OnnxModule {
       return;
     }
 
-    const inferred = [...this.configuredInKeys];
-    for (let i = inferred.length; i < modelInputs.length; i++) {
-      inferred.push(modelInputs[i]);
+    if (this.configuredInKeys.length === modelInputs.length) {
+      this.inKeys = [...this.configuredInKeys];
+      return;
     }
-    this.inKeys = inferred;
+
+    this.inKeys = modelInputs.map((name, index) => {
+      if (this.configuredInKeys.includes(name)) {
+        return name;
+      }
+      if (name === 'obs' && this.configuredInKeys.includes('policy')) {
+        return 'policy';
+      }
+      return this.configuredInKeys[index] ?? name;
+    });
   }
 }

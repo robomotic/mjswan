@@ -60,13 +60,17 @@ class MotionConfig:
             data["dataset_joint_names"] = list(self.dataset_joint_names)
         if self.default:
             data["default"] = True
+        if self.metadata:
+            data["metadata"] = dict(self.metadata)
         return data
 
 
 class MotionHandle:
     """Handle for configuring a motion after it has been added to a policy."""
 
-    def __init__(self, motion_config: MotionConfig, policy: PolicyHandle) -> None:
+    def __init__(
+        self, motion_config: MotionConfig, policy: PolicyHandle | None
+    ) -> None:
         self._config = motion_config
         self._policy = policy
 

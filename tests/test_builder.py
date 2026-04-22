@@ -19,6 +19,7 @@ import mujoco
 import pytest
 
 import mjswan
+from mjswan._build_client import ClientBuilder
 from mjswan.builder import Builder
 from mjswan.envs.mdp import observations as obs_fns
 from mjswan.envs.mdp import terminations as term_fns
@@ -85,6 +86,60 @@ class TestBuilderGtmId:
 
     def test_stored_when_provided(self):
         assert Builder(gtm_id="GTM-W79HQ38W")._gtm_id == "GTM-W79HQ38W"
+
+
+class TestClientBuilderCustomTerminations:
+    def test_preserves_template_imports_when_inlining_local_utils(
+        self, tmp_path, monkeypatch
+    ):
+        project_dir = tmp_path / "template"
+        output_dir = project_dir / "src" / "core" / "termination"
+        output_dir.mkdir(parents=True)
+        source_dir = tmp_path / "custom"
+        source_dir.mkdir()
+
+        (source_dir / "utils.ts").write_text(
+            "export function helper(): boolean {\n  return true;\n}\n"
+        )
+        custom_ts = source_dir / "FooTermination.ts"
+        custom_ts.write_text(
+            "import { TerminationBase, type TerminationConfig } from './TerminationBase';\n"
+            "import type { PolicyState } from '../policy/types';\n"
+            "import { helper } from './utils';\n"
+            "\n"
+            "export class FooTermination extends TerminationBase {\n"
+            "  constructor(config: TerminationConfig) {\n"
+            "    super(config);\n"
+            "  }\n"
+            "\n"
+            "  evaluate(_state: PolicyState): boolean {\n"
+            "    return helper();\n"
+            "  }\n"
+            "}\n"
+        )
+
+        monkeypatch.setattr(
+            term_fns,
+            "_custom_registry",
+            {
+                "foo": term_fns.TermFunc(
+                    ts_name="FooTermination",
+                    ts_src=str(custom_ts),
+                )
+            },
+        )
+
+        ClientBuilder(project_dir).generate_custom_terminations()
+
+        generated = (output_dir / "custom_terminations.ts").read_text()
+        assert (
+            "import { TerminationBase, type TerminationConfig }"
+            " from './TerminationBase';"
+        ) in generated
+        assert "import { helper } from './utils';" not in generated
+        assert "function helper(): boolean" in generated
+        assert "export function helper" not in generated
+        assert "export class FooTermination extends TerminationBase" in generated
 
 
 # ===========================================================================

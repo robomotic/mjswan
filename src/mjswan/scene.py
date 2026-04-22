@@ -657,14 +657,11 @@ __all__ = ["ViewerConfig", "SceneConfig", "SceneHandle", "SplatConfig", "SplatHa
 def _extract_tracking_motion_term(commands: Mapping[str, Any] | None) -> Any | None:
     if not commands:
         return None
-    term = commands.get("motion")
-    if term is None:
-        return None
-    class_name = type(term).__name__
-    if class_name == "MotionCommandCfg":
-        return term
-    if hasattr(term, "anchor_body_name") and hasattr(term, "body_names"):
-        return term
+    for term in commands.values():
+        if type(term).__name__ == "MotionCommandCfg":
+            return term
+        if hasattr(term, "anchor_body_name") and hasattr(term, "body_names"):
+            return term
     return None
 
 
@@ -691,14 +688,21 @@ def _attach_tracking_motion(
             cache[run_path] = fetch_motion_npz_from_wandb_run(run_path)
         motion_name, payload = cache[run_path]
 
+    resolved_joint_names = (
+        dataset_joint_names
+        if dataset_joint_names is not None
+        else (
+            list(handle._config.policy_joint_names)
+            if handle._config.policy_joint_names is not None
+            else None
+        )
+    )
     motion = MotionConfig(
         name=motion_name,
         data=payload,
         anchor_body_name=getattr(tracking_motion_term, "anchor_body_name", ""),
         body_names=tuple(getattr(tracking_motion_term, "body_names", ()) or ()),
-        dataset_joint_names=dataset_joint_names,
+        dataset_joint_names=resolved_joint_names,
         default=True,
     )
-    for existing in handle._config.motions:
-        existing.default = False
-    handle._config.motions.append(motion)
+    handle._append_motion(motion)

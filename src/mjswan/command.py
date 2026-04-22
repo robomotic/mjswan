@@ -185,6 +185,7 @@ def _serialize_motion_command(cfg: Any) -> dict[str, Any]:
     return data
 
 
+# Bridges mjlab's MotionCommandCfg (e.g. isaac_lab_tasks MotionCommandCfg) to the TrackingCommand term.
 register_command_term(
     "MotionCommandCfg",
     CommandTermSpec(

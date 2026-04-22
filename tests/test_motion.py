@@ -75,6 +75,17 @@ class TestMotionConfigToDict:
         result = cfg.to_dict("x.npz")
         assert result["fps"] == 120.0
 
+    def test_to_dict_omits_metadata_when_empty(self):
+        cfg = self._make_cfg()
+        result = cfg.to_dict("x.npz")
+        assert "metadata" not in result
+
+    def test_to_dict_includes_metadata_when_set(self):
+        cfg = self._make_cfg()
+        cfg.metadata["source_run"] = "abc/def/xyz"
+        result = cfg.to_dict("x.npz")
+        assert result["metadata"] == {"source_run": "abc/def/xyz"}
+
 
 # ===========================================================================
 # MotionConfig — defaults

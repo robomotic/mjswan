@@ -2,16 +2,7 @@ import { getCommandManager } from '../command';
 import { TrackingCommand } from '../command/TrackingCommand';
 import { TerminationBase, type TerminationConfig } from './TerminationBase';
 import type { PolicyState } from '../policy/types';
-
-function getBodyIdByName(mjModel: import('mujoco').MjModel, bodyName: string): number {
-  for (let i = 0; i < mjModel.nbody; i++) {
-    const name = mjModel.body(i).name;
-    if (name === bodyName || name.endsWith(`/${bodyName}`)) {
-      return i;
-    }
-  }
-  return -1;
-}
+import { getBodyIdByName } from './utils';
 
 export class BadAnchorPosZOnly extends TerminationBase {
   private readonly threshold: number;
