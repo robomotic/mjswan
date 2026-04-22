@@ -16,7 +16,6 @@ Requirements:
 - W&B must already be authenticated for the target run
 
 Environment variables:
-- ``MJSWAN_BASE_PATH``: Override the built app base path
 - ``MJSWAN_NO_LAUNCH=1``: Build without opening a browser
 - ``MJSWAN_WANDB_RUN_PATH``: Override the default W&B run path
 - ``MJSWAN_SPINKICK_MOTION_ARTIFACT``: Override the W&B motion artifact URL/path
@@ -29,8 +28,8 @@ import os
 import tempfile
 from pathlib import Path
 
-import g1_spinkick_terminations  # noqa: F401 - registers custom terminations
 import mjlab.tasks  # noqa: F401 - populates the mjlab task registry
+import terminations  # noqa: F401 - registers custom terminations
 from mjlab.tasks.registry import load_env_cfg
 
 import mjswan
@@ -71,8 +70,7 @@ def setup_builder() -> mjswan.Builder:
     os.chdir(example_dir)
 
     run_path = os.getenv("MJSWAN_WANDB_RUN_PATH", DEFAULT_RUN_PATH)
-    base_path = os.getenv("MJSWAN_BASE_PATH", "/")
-    builder = mjswan.Builder(base_path=base_path)
+    builder = mjswan.Builder()
 
     with tempfile.TemporaryDirectory(prefix="mjswan-g1-spinkick-") as tmp_dir:
         motion_file = _resolve_motion_file(Path(tmp_dir))

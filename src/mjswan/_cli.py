@@ -28,8 +28,8 @@ def simple() -> None:
 
 
 def mjlab() -> None:
-    """Run examples/mjlab/defaults.py"""
-    _run_module("examples.mjlab.defaults")
+    """Run examples/mjlab/defaults/main.py"""
+    _run_module("examples.mjlab.defaults.main")
 
 
 def serve() -> None:
