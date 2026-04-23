@@ -163,6 +163,38 @@ def velocity_command(
     )
 
 
+def _serialize_motion_command(cfg: Any) -> dict[str, Any]:
+    """Convert mjlab's ``MotionCommandCfg`` into browser tracking metadata."""
+    data: dict[str, Any] = {
+        "anchor_body_name": getattr(cfg, "anchor_body_name", ""),
+        "body_names": list(getattr(cfg, "body_names", ()) or ()),
+        "sampling_mode": getattr(cfg, "sampling_mode", "start"),
+        "pose_range": {
+            key: list(value)
+            for key, value in (getattr(cfg, "pose_range", None) or {}).items()
+        },
+        "velocity_range": {
+            key: list(value)
+            for key, value in (getattr(cfg, "velocity_range", None) or {}).items()
+        },
+        "joint_position_range": list(getattr(cfg, "joint_position_range", (0.0, 0.0))),
+    }
+    entity_name = getattr(cfg, "entity_name", None)
+    if entity_name:
+        data["entity_name"] = entity_name
+    return data
+
+
+# Bridges mjlab's MotionCommandCfg (e.g. isaac_lab_tasks MotionCommandCfg) to the TrackingCommand term.
+register_command_term(
+    "MotionCommandCfg",
+    CommandTermSpec(
+        ts_name="TrackingCommand",
+        serializer=_serialize_motion_command,
+    ),
+)
+
+
 __all__ = [
     "Button",
     "ButtonConfig",

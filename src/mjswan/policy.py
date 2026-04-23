@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 import onnx
 
 from .command import CommandTermConfig, velocity_command
+from .motion import MotionConfig, MotionHandle
 
 if TYPE_CHECKING:
     from .envs.mdp.actions.actions import ActionTermCfg
@@ -97,6 +98,9 @@ class PolicyConfig:
 
     extras: dict[str, Any] | None = None
     """Optional extra policy config payload serialized verbatim into JSON."""
+
+    motions: list[MotionConfig] = field(default_factory=list)
+    """Reference motions available for this policy."""
 
     default: bool = False
     """Whether this policy should be the initially selected one in the viewer.
@@ -187,6 +191,91 @@ class PolicyHandle:
         """
         self._config.metadata[key] = value
         return self
+
+    def _append_motion(self, motion: MotionConfig) -> MotionHandle:
+        if motion.default:
+            for existing in self._config.motions:
+                existing.default = False
+        self._config.motions.append(motion)
+        return MotionHandle(motion, self)
+
+    def add_motion(
+        self,
+        *,
+        name: str,
+        source: str,
+        fps: float = 50.0,
+        anchor_body_name: str,
+        body_names: tuple[str, ...] | list[str],
+        dataset_joint_names: list[str] | None = None,
+        default: bool = False,
+    ) -> MotionHandle:
+        """Add a bundled ``.npz`` reference motion to this policy."""
+        motion = MotionConfig(
+            name=name,
+            source=source,
+            fps=fps,
+            anchor_body_name=anchor_body_name,
+            body_names=tuple(body_names),
+            dataset_joint_names=(
+                list(dataset_joint_names)
+                if dataset_joint_names is not None
+                else (
+                    list(self._config.policy_joint_names)
+                    if self._config.policy_joint_names is not None
+                    else None
+                )
+            ),
+            default=default,
+        )
+        return self._append_motion(motion)
+
+    def add_motion_from_wandb(
+        self,
+        *,
+        name: str | None = None,
+        wandb_run_path: str | None = None,
+        run_id: str | None = None,
+        entity: str | None = None,
+        project: str | None = None,
+        fps: float = 50.0,
+        anchor_body_name: str,
+        body_names: tuple[str, ...] | list[str],
+        dataset_joint_names: list[str] | None = None,
+        default: bool = False,
+    ) -> MotionHandle:
+        """Download a motion artifact from W&B and attach it to this policy."""
+        from .wandb_utils import fetch_motion_npz_from_wandb_run, resolve_wandb_run_path
+
+        resolved_run_path = resolve_wandb_run_path(
+            wandb_run_path=wandb_run_path,
+            run_id=run_id,
+            entity=entity,
+            project=project,
+        )
+        motion_name, payload = fetch_motion_npz_from_wandb_run(resolved_run_path)
+        motion = MotionConfig(
+            name=name or motion_name,
+            data=payload,
+            fps=fps,
+            anchor_body_name=anchor_body_name,
+            body_names=tuple(body_names),
+            dataset_joint_names=(
+                list(dataset_joint_names)
+                if dataset_joint_names is not None
+                else (
+                    list(self._config.policy_joint_names)
+                    if self._config.policy_joint_names is not None
+                    else None
+                )
+            ),
+            default=default,
+        )
+        if default:
+            for existing in self._config.motions:
+                existing.default = False
+        self._config.motions.append(motion)
+        return MotionHandle(motion, self)
 
 
 __all__ = ["PolicyConfig", "PolicyHandle"]

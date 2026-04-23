@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -335,6 +336,8 @@ class ClientBuilder:
         deduped_imports: list[str] = []
         class_bodies: list[str] = []
         class_names: list[str] = []
+        inlined_utils_lines: list[str] = []
+        seen_utils_paths: set[str] = set()
         for sentinel in custom_entries.values():
             src_path = Path(sentinel.ts_src).expanduser().resolve()  # type: ignore[arg-type]
             if not src_path.exists():
@@ -345,9 +348,36 @@ class ClientBuilder:
             body_lines = []
             for src_line in src_lines:
                 if src_line.startswith("import "):
-                    if src_line not in seen_imports:
-                        seen_imports.add(src_line)
-                        deduped_imports.append(src_line)
+                    # Detect local sibling imports (e.g. from './utils') and inline
+                    # their content instead of emitting an unresolvable import statement.
+                    local_match = re.match(
+                        r"^import\s+(?:type\s+)?\{[^}]+\}\s+from\s+['\"](\./[^'\"]+)['\"];?$",
+                        src_line,
+                    )
+                    if local_match:
+                        utils_rel = local_match.group(1)
+                        utils_path = (src_path.parent / (utils_rel + ".ts")).resolve()
+                        if utils_path.exists():
+                            if str(utils_path) not in seen_utils_paths:
+                                seen_utils_paths.add(str(utils_path))
+                                for u_line in utils_path.read_text().splitlines():
+                                    if not u_line.startswith("import "):
+                                        # Strip leading 'export' so symbols become file-local.
+                                        stripped = (
+                                            u_line[len("export ") :]
+                                            if u_line.startswith("export ")
+                                            and not u_line.startswith("export default")
+                                            else u_line
+                                        )
+                                        inlined_utils_lines.append(stripped)
+                            # Skip the import line — content is inlined above.
+                        elif src_line not in seen_imports:
+                            seen_imports.add(src_line)
+                            deduped_imports.append(src_line)
+                    else:
+                        if src_line not in seen_imports:
+                            seen_imports.add(src_line)
+                            deduped_imports.append(src_line)
                 else:
                     body_lines.append(src_line)
             class_bodies.append("\n".join(body_lines).strip())
@@ -355,6 +385,9 @@ class ClientBuilder:
 
         lines.extend(deduped_imports)
         lines.append("")
+        if inlined_utils_lines:
+            lines.extend(inlined_utils_lines)
+            lines.append("")
         for body in class_bodies:
             lines.append(body)
             lines.append("")
@@ -499,7 +532,7 @@ class ClientBuilder:
 
 
 def ensure_node_env(
-    project_dir: Path, node_version: str = "20.4.0", clean: bool = False
+    project_dir: Path, node_version: str = "25.5.0", clean: bool = False
 ) -> Path:
     builder = ClientBuilder(project_dir)
     builder.create_env(clean=clean)

@@ -34,6 +34,7 @@ import type { PolicyConfig } from '../policy/types';
 import { TrackingPolicy } from '../policy/modules/TrackingPolicy';
 import { LocomotionPolicy } from '../policy/modules/LocomotionPolicy';
 import { getCommandManager, type CommandTermContext, type CommandsConfig } from '../command';
+import { TrackingCommand } from '../command/TrackingCommand';
 import { EventManager } from '../event/EventManager';
 import { Events } from '../event/events';
 import type { TerrainData } from '../event/EventBase';
@@ -125,6 +126,7 @@ export class mjswanRuntime {
   private onnxModule: OnnxModule | null;
   private onnxInputDict: Record<string, ort.Tensor> | null;
   private onnxInferencing: boolean;
+  private onnxTimeStep: number;
   private terminationManager: TerminationManager | null;
   private eventManager: EventManager | null;
   private terrainData: TerrainData | null;
@@ -228,6 +230,7 @@ export class mjswanRuntime {
     this.onnxModule = null;
     this.onnxInputDict = null;
     this.onnxInferencing = false;
+    this.onnxTimeStep = 0;
     this.terminationManager = null;
     this.eventManager = null;
     this.terrainData = null;
@@ -356,6 +359,23 @@ export class mjswanRuntime {
       this.policyRunner.reset(state);
     }
     console.log('[mjswanRuntime] Simulation reset');
+  }
+
+  async setSelectedMotion(motionName: string | null): Promise<void> {
+    const term = getCommandManager().getTerm('motion');
+    if (!(term instanceof TrackingCommand)) {
+      return;
+    }
+    await term.setSelectedMotion(motionName);
+    this.resetSimulation();
+  }
+
+  setReferenceVisible(visible: boolean): void {
+    const term = getCommandManager().getTerm('motion');
+    if (!(term instanceof TrackingCommand)) {
+      return;
+    }
+    term.setReferenceVisible(visible);
   }
 
   async loadScene(scenePath: string): Promise<void> {
@@ -500,7 +520,6 @@ export class mjswanRuntime {
       const target = this.timestep * this.decimation;
 
       if (this.mjModel && this.mjData) {
-        getCommandManager().update(target);
         this.mujoco.mj_forward(this.mjModel, this.mjData);
         if (this.policyRunner && this.policyStateBuilder) {
           const state = this.policyStateBuilder.build();
@@ -539,6 +558,12 @@ export class mjswanRuntime {
             }
           }
         }
+
+        // Commands are updated after the physics step to match mjlab training-time semantics:
+        // the policy sees command values from the previous step, consistent with how mjlab
+        // computes observations before stepping the environment.
+        getCommandManager().update(target);
+        getCommandManager().updateDebugVisuals();
       }
 
       const elapsed = (performance.now() - loopStart) / 1000;
@@ -560,6 +585,7 @@ export class mjswanRuntime {
     this.onnxModule = null;
     this.onnxInputDict = null;
     this.onnxInferencing = false;
+    this.onnxTimeStep = 0;
     this.terminationManager = null;
     // Note: eventManager and terrainData are scene-level state set in loadEnvironment; do not clear here.
 
@@ -583,6 +609,20 @@ export class mjswanRuntime {
 
     try {
       const { config } = await this.fetchPolicyConfig(policyConfigPath);
+      if (Array.isArray(config.motions)) {
+        config.motions = config.motions.map((motion) => ({
+          ...motion,
+          path: this.resolveAssetUrl(
+            this.resolvePolicyAssetPath(policyConfigPath, motion.path)
+          ),
+        }));
+      }
+      if (config.commands?.motion?.name === 'TrackingCommand' && Array.isArray(config.motions)) {
+        config.commands.motion = {
+          ...config.commands.motion,
+          motions: config.motions,
+        };
+      }
       this.resetSimulationState();
       this.mujoco.mj_forward(this.mjModel, this.mjData);
       this.updateCachedState();
@@ -594,8 +634,19 @@ export class mjswanRuntime {
           mjModel: this.mjModel,
           mjData: this.mjData,
           scene: this.scene,
+          bodies: this.bodies,
+          mujocoRoot: this.mujocoRoot,
         });
         getCommandManager().resetTerms();
+        const motionTerm = getCommandManager().getTerm('motion');
+        if (motionTerm instanceof TrackingCommand) {
+          await motionTerm.setSelectedMotion(
+            config.motions?.find((motion) => motion.default)?.name
+              ?? config.motions?.[0]?.name
+              ?? null
+          );
+          motionTerm.setReferenceVisible(true);
+        }
         this.mujoco.mj_forward(this.mjModel, this.mjData);
         this.updateCachedState();
       }
@@ -913,6 +964,10 @@ export class mjswanRuntime {
       });
     }
     getCommandManager().resetTerms();
+    if (this.onnxModule) {
+      this.onnxInputDict = this.onnxModule.initInput();
+    }
+    this.onnxTimeStep = 0;
     this.mujoco.mj_forward(this.mjModel, this.mjData);
     this.lastSimState.bodies.clear();
     this.updateCachedState();
@@ -1005,6 +1060,9 @@ export class mjswanRuntime {
         this.onnxInputDict = this.onnxModule.initInput();
       }
       const input: Record<string, ort.Tensor> = { ...this.onnxInputDict };
+      if (this.onnxModule.inKeys.includes('time_step')) {
+        input.time_step = new ort.Tensor('float32', new Float32Array([this.onnxTimeStep]), [1, 1]);
+      }
       for (const [key, value] of Object.entries(obs)) {
         input[key] = new ort.Tensor('float32', value, [1, value.length]);
       }
@@ -1021,6 +1079,9 @@ export class mjswanRuntime {
       const [result, carry] = await this.onnxModule.runInference(input);
       if (Object.keys(carry).length > 0) {
         this.onnxInputDict = { ...this.onnxInputDict, ...carry };
+      }
+      if (this.onnxModule.inKeys.includes('time_step')) {
+        this.onnxTimeStep += 1;
       }
 
       const outKey = this.onnxModule.outKeys[0];

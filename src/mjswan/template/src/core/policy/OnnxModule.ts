@@ -14,6 +14,7 @@ export type OnnxConfig = {
 export class OnnxModule {
   private config: OnnxConfig;
   private session: ort.InferenceSession | null;
+  private configuredInKeys: string[];
   inKeys: string[];
   outKeys: string[];
   isRecurrent: boolean;
@@ -26,7 +27,8 @@ export class OnnxModule {
     this.session = null;
     const inKeys = config.meta?.in_keys ?? ['policy'];
     const outKeys = config.meta?.out_keys ?? ['action'];
-    this.inKeys = inKeys.map((key) => (Array.isArray(key) ? key.join(',') : key));
+    this.configuredInKeys = inKeys.map((key) => (Array.isArray(key) ? key.join(',') : key));
+    this.inKeys = [...this.configuredInKeys];
     this.outKeys = outKeys.map((key) => (Array.isArray(key) ? key.join(',') : key));
     this.isRecurrent = this.inKeys.includes('adapt_hx');
   }
@@ -41,16 +43,20 @@ export class OnnxModule {
       executionProviders: ['wasm'],
       graphOptimizationLevel: 'all',
     });
+    this.inferInputKeys();
+    this.isRecurrent = this.inKeys.includes('adapt_hx');
   }
 
   initInput(): Record<string, ort.Tensor> {
+    const inputs: Record<string, ort.Tensor> = {};
     if (this.isRecurrent) {
-      return {
-        is_init: new ort.Tensor('bool', [true], [1]),
-        adapt_hx: new ort.Tensor('float32', new Float32Array(128), [1, 128]),
-      };
+      inputs.is_init = new ort.Tensor('bool', [true], [1]);
+      inputs.adapt_hx = new ort.Tensor('float32', new Float32Array(128), [1, 128]);
     }
-    return {};
+    if (this.inKeys.includes('time_step')) {
+      inputs.time_step = new ort.Tensor('float32', new Float32Array([0.0]), [1, 1]);
+    }
+    return inputs;
   }
 
   async runInference(
@@ -87,5 +93,33 @@ export class OnnxModule {
     }
 
     return [result, carry];
+  }
+
+  private inferInputKeys(): void {
+    if (!this.session) {
+      return;
+    }
+    const modelInputs = this.session.inputNames;
+    if (modelInputs.length <= 1) {
+      this.inKeys = [...this.configuredInKeys];
+      return;
+    }
+
+    if (this.configuredInKeys.length === modelInputs.length) {
+      this.inKeys = [...this.configuredInKeys];
+      return;
+    }
+
+    this.inKeys = modelInputs.map((name) => {
+      if (this.configuredInKeys.includes(name)) {
+        return name;
+      }
+      if (name === 'obs' && this.configuredInKeys.includes('policy')) {
+        return 'policy';
+      }
+      // No configured key matches this model input by name; pass it through as-is.
+      // runInference will forward it using the model's own input name.
+      return name;
+    });
   }
 }

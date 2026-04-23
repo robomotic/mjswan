@@ -230,6 +230,7 @@ class Builder:
                                             or getattr(policy, "observations", None)
                                             or getattr(policy, "actions", None)
                                             or getattr(policy, "terminations", None)
+                                            or getattr(policy, "motions", None)
                                             else {}
                                         ),
                                         **(
@@ -240,6 +241,16 @@ class Builder:
                                         **(
                                             {"default": True}
                                             if getattr(policy, "default", False)
+                                            else {}
+                                        ),
+                                        **(
+                                            {
+                                                "motions": [
+                                                    motion.to_summary_dict()
+                                                    for motion in policy.motions
+                                                ]
+                                            }
+                                            if getattr(policy, "motions", None)
                                             else {}
                                         ),
                                     }
@@ -297,6 +308,11 @@ class Builder:
                 "Policy name cannot contain path separators ('/' or '\\')."
             )
         return name
+
+    def _motion_filename(self, policy_name: str, motion_name: str) -> str:
+        if not motion_name or motion_name.strip() == "":
+            raise ValueError("Motion name must be a non-empty string.")
+        return f"{name2id(policy_name)}_{name2id(motion_name)}.npz"
 
     def _save_web(self, output_path: Path) -> None:
         """Save as a complete web application.
@@ -522,6 +538,15 @@ class Builder:
                                         data["initial_qvel"] = policy.initial_qvel
                                     if getattr(policy, "extras", None):
                                         data["extras"] = policy.extras
+                                    if getattr(policy, "motions", None):
+                                        data["motions"] = [
+                                            motion.to_dict(
+                                                self._motion_filename(
+                                                    policy.name, motion.name
+                                                )
+                                            )
+                                            for motion in policy.motions
+                                        ]
                                     # Serialize termination terms
                                     if policy.terminations:
                                         data["terminations"] = {
@@ -544,6 +569,7 @@ class Builder:
                             or policy.actions
                             or policy.terminations
                             or policy.policy_joint_names
+                            or policy.motions
                         ):
                             # No config_path but MDP components defined
                             target = policy_path.with_suffix(".json")
@@ -579,8 +605,41 @@ class Builder:
                                 }
                                 if terminations:
                                     data["terminations"] = terminations
+                            if policy.motions:
+                                data["motions"] = [
+                                    motion.to_dict(
+                                        self._motion_filename(policy.name, motion.name)
+                                    )
+                                    for motion in policy.motions
+                                ]
                             with open(target, "w") as f:
                                 json.dump(data, f, indent=2)
+
+                        seen_motion_files: set[str] = set()
+                        for motion in policy.motions:
+                            filename = self._motion_filename(policy.name, motion.name)
+                            if filename in seen_motion_files:
+                                raise ValueError(
+                                    f"Motion filename collision for policy '{policy.name}': "
+                                    f"'{motion.name}' sanitizes to '{filename}' which is already used. "
+                                    "Rename one of the motions to avoid this conflict."
+                                )
+                            seen_motion_files.add(filename)
+                            target = scene_dir / filename
+                            if motion.data is not None:
+                                target.write_bytes(motion.data)
+                            elif motion.source is not None:
+                                src = Path(motion.source).expanduser()
+                                if not src.is_absolute():
+                                    src = (Path.cwd() / src).resolve()
+                                if src.exists():
+                                    shutil.copy2(str(src), str(target))
+                                else:
+                                    warnings.warn(
+                                        f"Motion source file not found: {src}",
+                                        category=RuntimeWarning,
+                                        stacklevel=2,
+                                    )
 
                     # Copy bundled .spz files for each splat with source set
                     for splat in scene.splats:

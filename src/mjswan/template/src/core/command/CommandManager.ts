@@ -1,4 +1,5 @@
 import { CustomCommands } from './custom_commands';
+import { TrackingCommand } from './TrackingCommand';
 import type {
   ButtonCommandConfig,
   CommandConfigEntry,
@@ -67,6 +68,7 @@ class UiCommand implements CommandTerm {
 
 const BuiltinCommandTerms: Record<string, CommandTermConstructor> = {
   UiCommand,
+  TrackingCommand,
 };
 
 export class CommandManager {
@@ -76,6 +78,7 @@ export class CommandManager {
   private values: Map<string, number> = new Map();
   private listeners: Set<CommandEventListener> = new Set();
   private resetCallback: (() => void) | null = null;
+  private context: CommandTermContext | null = null;
 
   constructor() {
     this.registerSystemReset();
@@ -83,6 +86,7 @@ export class CommandManager {
 
   initialize(commandsConfig: CommandsConfig, context: CommandTermContext): void {
     this.clear();
+    this.context = context;
     const registry: Record<string, CommandTermConstructor> = {
       ...BuiltinCommandTerms,
       ...CustomCommands,
@@ -161,6 +165,14 @@ export class CommandManager {
     return term ? term.getCommand() : new Float32Array(0);
   }
 
+  getTerm(groupName: string): CommandTerm | undefined {
+    return this.terms.get(groupName);
+  }
+
+  getContext(): CommandTermContext | null {
+    return this.context;
+  }
+
   getVelocityCommand(): Float32Array {
     if (this.terms.has('velocity')) {
       return this.getCommand('velocity');
@@ -233,6 +245,7 @@ export class CommandManager {
     this.commands.clear();
     this.commandGroups.clear();
     this.values.clear();
+    this.context = null;
     this.registerSystemReset();
     this.emit({ type: 'clear', commandId: '' });
   }
@@ -251,6 +264,7 @@ export class CommandManager {
     this.values.clear();
     this.listeners.clear();
     this.resetCallback = null;
+    this.context = null;
   }
 
   private registerSystemReset(): void {

@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import mujoco
@@ -22,6 +23,7 @@ from .adapters import (
     adapt_terminations,
     resolve_action_scales,
 )
+from .motion import MotionConfig
 from .policy import PolicyConfig, PolicyHandle
 from .splat import SplatConfig, SplatHandle
 from .viewer_config import ViewerConfig
@@ -399,6 +401,8 @@ class SceneHandle:
             )
 
         run_paths = [run_path] if isinstance(run_path, str) else run_path
+        tracking_motion_term = _extract_tracking_motion_term(commands)
+        tracking_motion_cache: dict[str, tuple[str, bytes]] = {}
 
         handles = []
         seen_names: set[str] = set()
@@ -419,6 +423,12 @@ class SceneHandle:
                         actions=actions,
                         terminations=terminations,
                         extras=extras,
+                    )
+                    _attach_tracking_motion(
+                        handle,
+                        path,
+                        tracking_motion_term,
+                        tracking_motion_cache,
                     )
                     handles.append(handle)
         else:
@@ -451,6 +461,13 @@ class SceneHandle:
                             default_joint_pos=export_context.default_joint_pos or None,
                             encoder_bias=export_context.encoder_bias or None,
                             extras=extras,
+                        )
+                        _attach_tracking_motion(
+                            handle,
+                            path,
+                            tracking_motion_term,
+                            tracking_motion_cache,
+                            dataset_joint_names=export_context.joint_names or None,
                         )
                         handles.append(handle)
             finally:
@@ -635,3 +652,57 @@ class SceneHandle:
 
 
 __all__ = ["ViewerConfig", "SceneConfig", "SceneHandle", "SplatConfig", "SplatHandle"]
+
+
+def _extract_tracking_motion_term(commands: Mapping[str, Any] | None) -> Any | None:
+    if not commands:
+        return None
+    for term in commands.values():
+        if type(term).__name__ == "MotionCommandCfg":
+            return term
+        if hasattr(term, "anchor_body_name") and hasattr(term, "body_names"):
+            return term
+    return None
+
+
+def _attach_tracking_motion(
+    handle: PolicyHandle,
+    run_path: str,
+    tracking_motion_term: Any | None,
+    cache: dict[str, tuple[str, bytes]],
+    *,
+    dataset_joint_names: list[str] | None = None,
+) -> None:
+    if tracking_motion_term is None:
+        return
+
+    from .wandb_utils import fetch_motion_npz_from_wandb_run
+
+    motion_file = getattr(tracking_motion_term, "motion_file", None)
+    motion_path = Path(motion_file).expanduser() if motion_file else None
+    if motion_path is not None and motion_path.is_file():
+        motion_name = motion_path.stem or "motion"
+        payload = motion_path.read_bytes()
+    else:
+        if run_path not in cache:
+            cache[run_path] = fetch_motion_npz_from_wandb_run(run_path)
+        motion_name, payload = cache[run_path]
+
+    resolved_joint_names = (
+        dataset_joint_names
+        if dataset_joint_names is not None
+        else (
+            list(handle._config.policy_joint_names)
+            if handle._config.policy_joint_names is not None
+            else None
+        )
+    )
+    motion = MotionConfig(
+        name=motion_name,
+        data=payload,
+        anchor_body_name=getattr(tracking_motion_term, "anchor_body_name", ""),
+        body_names=tuple(getattr(tracking_motion_term, "body_names", ()) or ()),
+        dataset_joint_names=resolved_joint_names,
+        default=True,
+    )
+    handle._append_motion(motion)

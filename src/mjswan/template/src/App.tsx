@@ -14,6 +14,10 @@ interface PolicyConfig {
   metadata: Record<string, unknown>;
   config?: string;
   default?: boolean;
+  motions?: Array<{
+    name: string;
+    default?: boolean;
+  }>;
 }
 
 interface ViewerConfig {
@@ -56,6 +60,7 @@ interface AppConfig {
 }
 
 const PANEL_QUERY_PARAM = 'panel';
+const REF_QUERY_PARAM = 'ref';
 
 function getProjectIdFromLocation(): string | null {
   const base = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '/');
@@ -208,9 +213,29 @@ function pickPolicy(scene: SceneConfig, policyQuery: string | null): string | nu
   return found?.name ?? fallback.name;
 }
 
+function pickMotion(policy: PolicyConfig | null, motionQuery: string | null): string | null {
+  if (!policy?.motions?.length) {
+    return null;
+  }
+  const fallback = policy.motions.find((motion) => motion.default) ?? policy.motions[0];
+  if (!motionQuery) {
+    return fallback.name;
+  }
+  const normalized = motionQuery.trim().toLowerCase();
+  const found =
+    policy.motions.find((motion) => motion.name.toLowerCase() === normalized) ||
+    policy.motions.find((motion) => sanitizeName(motion.name) === normalized);
+  return found?.name ?? fallback.name;
+}
+
 function isPanelVisibleFromSearch(search: string): boolean {
   const params = new URLSearchParams(search);
   return params.get(PANEL_QUERY_PARAM) !== '0';
+}
+
+function isRefVisibleFromSearch(search: string): boolean {
+  const params = new URLSearchParams(search);
+  return params.get(REF_QUERY_PARAM) !== '0';
 }
 
 function buildProjectPath(projectId: string | null): string {
@@ -230,11 +255,13 @@ function updateUrlParams({
   sceneName,
   policyName,
   panelVisible,
+  showReference,
 }: {
   projectId: string | null;
   sceneName: string | null;
   policyName: string | null;
   panelVisible: boolean;
+  showReference: boolean;
 }) {
   const pathname = buildProjectPath(projectId);
   const params = new URLSearchParams(window.location.search);
@@ -254,6 +281,11 @@ function updateUrlParams({
   } else {
     params.set(PANEL_QUERY_PARAM, '0');
   }
+  if (showReference) {
+    params.delete(REF_QUERY_PARAM);
+  } else {
+    params.set(REF_QUERY_PARAM, '0');
+  }
 
   const search = params.toString();
   const newUrl = pathname + (search ? `?${search}` : '') + window.location.hash;
@@ -265,6 +297,10 @@ function AppContent() {
   const [currentProject, setCurrentProject] = useState<ProjectConfig | null>(null);
   const [currentScene, setCurrentScene] = useState<SceneConfig | null>(null);
   const [selectedPolicy, setSelectedPolicy] = useState<string | null>(null);
+  const [selectedMotion, setSelectedMotion] = useState<string | null>(null);
+  const [showReferenceMotion, setShowReferenceMotion] = useState(() =>
+    isRefVisibleFromSearch(window.location.search)
+  );
   const [error, setError] = useState<string | null>(null);
   const [selectedSplat, setSelectedSplat] = useState<string | null>(null);
   const [customSplatUrl, setCustomSplatUrl] = useState<string | null>(null);
@@ -303,6 +339,8 @@ function AppContent() {
         setCurrentScene(selectedScene);
         const initialPolicy = selectedScene ? pickPolicy(selectedScene, policyQuery) : null;
         setSelectedPolicy(initialPolicy);
+        const initialPolicyConfig = selectedScene?.policies.find((policy) => policy.name === initialPolicy) ?? null;
+        setSelectedMotion(pickMotion(initialPolicyConfig, null));
       })
       .catch((err) => {
         console.error('Failed to load config:', err);
@@ -334,6 +372,15 @@ function AppContent() {
     const projectDir = currentProject.id ? currentProject.id : 'main';
     return `${projectDir}/assets/${selectedPolicyConfig.config}`.replace(/\/+/g, '/');
   }, [currentProject, selectedPolicyConfig]);
+  const motionOptions = useMemo(() => {
+    if (!selectedPolicyConfig?.motions?.length) {
+      return [] as { value: string; label: string }[];
+    }
+    return selectedPolicyConfig.motions.map((motion) => ({
+      value: motion.name,
+      label: motion.name,
+    }));
+  }, [selectedPolicyConfig]);
 
   // Resolve bundled splat paths to URLs the viewer can fetch.
   // When config.json uses "path" (bundled), convert it to a relative URL.
@@ -400,6 +447,11 @@ function AppContent() {
     runtimeRef.current = runtime;
   }, []);
 
+  useEffect(() => {
+    setSelectedMotion(pickMotion(selectedPolicyConfig, null));
+    setShowReferenceMotion(Boolean(selectedPolicyConfig?.motions?.length));
+  }, [selectedPolicyConfig]);
+
   const splatOptions = useMemo(() => {
     if (!currentScene?.splats?.length) return [] as { value: string; label: string }[];
     return currentScene.splats.map((s) => ({ value: s.name, label: s.name }));
@@ -442,14 +494,16 @@ function AppContent() {
     sceneName?: string | null;
     policyName?: string | null;
     panelVisible?: boolean;
+    showReference?: boolean;
   }) => {
     updateUrlParams({
       projectId: next.projectId ?? currentProject?.id ?? null,
       sceneName: next.sceneName ?? currentScene?.name ?? null,
       policyName: next.policyName ?? selectedPolicy,
       panelVisible: next.panelVisible ?? panelVisible,
+      showReference: next.showReference ?? showReferenceMotion,
     });
-  }, [currentProject?.id, currentScene?.name, selectedPolicy, panelVisible]);
+  }, [currentProject?.id, currentScene?.name, selectedPolicy, panelVisible, showReferenceMotion]);
 
   const handleProjectChange = useCallback(
     (value: string | null) => {
@@ -467,6 +521,8 @@ function AppContent() {
       setCurrentScene(nextScene);
       const nextPolicy = nextScene ? pickPolicy(nextScene, null) : null;
       setSelectedPolicy(nextPolicy);
+      const nextPolicyConfig = nextScene?.policies.find((policy) => policy.name === nextPolicy) ?? null;
+      setSelectedMotion(pickMotion(nextPolicyConfig, null));
       syncUrlState({
         projectId: project.id,
         sceneName: nextScene?.name ?? null,
@@ -489,6 +545,8 @@ function AppContent() {
       setCurrentScene(scene);
       const nextPolicy = pickPolicy(scene, null);
       setSelectedPolicy(nextPolicy);
+      const nextPolicyConfig = scene.policies.find((policy) => policy.name === nextPolicy) ?? null;
+      setSelectedMotion(pickMotion(nextPolicyConfig, null));
       syncUrlState({
         projectId: currentProject.id,
         sceneName: value,
@@ -504,6 +562,8 @@ function AppContent() {
         showLoading();
       }
       setSelectedPolicy(value);
+      const nextPolicyConfig = currentScene?.policies.find((policy) => policy.name === value) ?? null;
+      setSelectedMotion(pickMotion(nextPolicyConfig, null));
       syncUrlState({ policyName: value });
     },
     [selectedPolicy, showLoading, syncUrlState]
@@ -516,6 +576,17 @@ function AppContent() {
     },
     [syncUrlState]
   );
+
+  const handleMotionChange = useCallback((value: string | null) => {
+    setSelectedMotion(value);
+    void runtimeRef.current?.setSelectedMotion(value);
+  }, []);
+
+  const handleShowReferenceChange = useCallback((value: boolean) => {
+    setShowReferenceMotion(value);
+    runtimeRef.current?.setReferenceVisible(value);
+    syncUrlState({ showReference: value });
+  }, [syncUrlState]);
 
   if (error) {
     return (
@@ -558,6 +629,11 @@ function AppContent() {
           policies={policyOptions}
           policyValue={selectedPolicy}
           onPolicyChange={handlePolicyChange}
+          motions={motionOptions}
+          motionValue={selectedMotion}
+          onMotionChange={handleMotionChange}
+          showReferenceMotion={showReferenceMotion}
+          onShowReferenceMotionChange={handleShowReferenceChange}
           commandsEnabled={!!policyConfigPath}
         />
         <MjswanViewer
@@ -568,6 +644,8 @@ function AppContent() {
           cameraConfig={currentScene?.camera}
           eventsConfig={currentScene?.events}
           terrainData={currentScene?.terrainData}
+          selectedMotion={selectedMotion}
+          showReferenceMotion={showReferenceMotion}
           onError={handleViewerError}
           onReady={handleViewerReady}
           onRuntimeReady={handleRuntimeReady}

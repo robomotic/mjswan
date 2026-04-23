@@ -19,6 +19,7 @@ import mujoco
 import pytest
 
 import mjswan
+from mjswan._build_client import ClientBuilder
 from mjswan.builder import Builder
 from mjswan.envs.mdp import observations as obs_fns
 from mjswan.envs.mdp import terminations as term_fns
@@ -85,6 +86,60 @@ class TestBuilderGtmId:
 
     def test_stored_when_provided(self):
         assert Builder(gtm_id="GTM-W79HQ38W")._gtm_id == "GTM-W79HQ38W"
+
+
+class TestClientBuilderCustomTerminations:
+    def test_preserves_template_imports_when_inlining_local_utils(
+        self, tmp_path, monkeypatch
+    ):
+        project_dir = tmp_path / "template"
+        output_dir = project_dir / "src" / "core" / "termination"
+        output_dir.mkdir(parents=True)
+        source_dir = tmp_path / "custom"
+        source_dir.mkdir()
+
+        (source_dir / "utils.ts").write_text(
+            "export function helper(): boolean {\n  return true;\n}\n"
+        )
+        custom_ts = source_dir / "FooTermination.ts"
+        custom_ts.write_text(
+            "import { TerminationBase, type TerminationConfig } from './TerminationBase';\n"
+            "import type { PolicyState } from '../policy/types';\n"
+            "import { helper } from './utils';\n"
+            "\n"
+            "export class FooTermination extends TerminationBase {\n"
+            "  constructor(config: TerminationConfig) {\n"
+            "    super(config);\n"
+            "  }\n"
+            "\n"
+            "  evaluate(_state: PolicyState): boolean {\n"
+            "    return helper();\n"
+            "  }\n"
+            "}\n"
+        )
+
+        monkeypatch.setattr(
+            term_fns,
+            "_custom_registry",
+            {
+                "foo": term_fns.TermFunc(
+                    ts_name="FooTermination",
+                    ts_src=str(custom_ts),
+                )
+            },
+        )
+
+        ClientBuilder(project_dir).generate_custom_terminations()
+
+        generated = (output_dir / "custom_terminations.ts").read_text()
+        assert (
+            "import { TerminationBase, type TerminationConfig }"
+            " from './TerminationBase';"
+        ) in generated
+        assert "import { helper } from './utils';" not in generated
+        assert "function helper(): boolean" in generated
+        assert "export function helper" not in generated
+        assert "export class FooTermination extends TerminationBase" in generated
 
 
 # ===========================================================================
@@ -165,6 +220,23 @@ class TestSaveConfigJson:
         policy = self._read_config(tmp_path)["projects"][0]["scenes"][0]["policies"][0]
         assert policy["name"] == "Policy"
         assert "config" not in policy
+
+    def test_policy_motion_summary_is_included_in_root_config(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(name="Policy", policy=minimal_onnx).add_motion(
+            name="Spin Kick",
+            source="motion.npz",
+            anchor_body_name="torso_link",
+            body_names=("pelvis", "torso_link"),
+            default=True,
+        )
+
+        builder._save_config_json(tmp_path)
+        policy = self._read_config(tmp_path)["projects"][0]["scenes"][0]["policies"][0]
+        assert policy["motions"] == [{"name": "Spin Kick", "default": True}]
 
     def test_multiple_projects_all_present_in_config(self, tmp_path, minimal_model):
         builder = Builder()
@@ -343,6 +415,43 @@ class TestSaveWebPolicyJson:
         )
         data = self._policy_json(self._run(builder, tmp_path), "Policy")
         assert data["onnx"]["path"] == "policy.onnx"
+
+    def test_no_config_path_motions_emitted_and_copied(
+        self, tmp_path, minimal_model, minimal_onnx
+    ):
+        motion_file = tmp_path / "spin_kick.npz"
+        motion_file.write_bytes(b"motion-bytes")
+
+        builder = Builder()
+        scene = builder.add_project(name="P").add_scene(name="S", model=minimal_model)
+        scene.add_policy(
+            name="Policy",
+            policy=minimal_onnx,
+            actions={"joint_pos": JointPositionActionCfg(actuator_names=(".*",))},
+        ).add_motion(
+            name="Spin Kick",
+            source=str(motion_file),
+            anchor_body_name="torso_link",
+            body_names=("pelvis", "torso_link"),
+            dataset_joint_names=["joint_a"],
+            default=True,
+        )
+
+        out = self._run(builder, tmp_path)
+        data = self._policy_json(out, "Policy")
+        assert data["motions"] == [
+            {
+                "name": "Spin Kick",
+                "path": "policy_spin_kick.npz",
+                "fps": 50.0,
+                "anchor_body_name": "torso_link",
+                "body_names": ["pelvis", "torso_link"],
+                "dataset_joint_names": ["joint_a"],
+                "default": True,
+            }
+        ]
+        motion_out = out / "main" / "assets" / "s" / "policy_spin_kick.npz"
+        assert motion_out.read_bytes() == b"motion-bytes"
 
     def test_no_config_path_commands_emitted_as_command_terms(
         self, tmp_path, minimal_model, minimal_onnx

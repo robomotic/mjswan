@@ -31,6 +31,7 @@ export class PolicyRunner {
   private context: PolicyRunnerContext | null;
   private policyJointNames: string[];
   private defaultJointPos: Float32Array;
+  private encoderBias: Float32Array;
   private numActions: number;
   private lastActions: Float32Array;
 
@@ -51,6 +52,11 @@ export class PolicyRunner {
     this.lastActions = new Float32Array(this.numActions);
     this.defaultJointPos = this.normalizeArray(
       config.default_joint_pos ?? [],
+      this.numActions,
+      0.0
+    );
+    this.encoderBias = this.normalizeArray(
+      config.encoder_bias ?? [],
       this.numActions,
       0.0
     );
@@ -164,6 +170,10 @@ export class PolicyRunner {
 
   getDefaultJointPos(): Float32Array {
     return new Float32Array(this.defaultJointPos);
+  }
+
+  getEncoderBias(): Float32Array {
+    return new Float32Array(this.encoderBias);
   }
 
   getLastActions(): Float32Array {
