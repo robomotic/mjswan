@@ -636,6 +636,7 @@ export class mjswanRuntime {
           scene: this.scene,
           bodies: this.bodies,
           mujocoRoot: this.mujocoRoot,
+          requestReset: () => this.resetSimulation(),
         });
         getCommandManager().resetTerms();
         const motionTerm = getCommandManager().getTerm('motion');

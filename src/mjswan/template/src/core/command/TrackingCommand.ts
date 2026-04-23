@@ -124,13 +124,13 @@ function setGhostMaterial(material: THREE.Material): THREE.Material {
     next.transparent = true;
   }
   if ('opacity' in next) {
-    next.opacity = 0.35;
+    next.opacity = 0.5;
   }
   if ('depthWrite' in next) {
     next.depthWrite = false;
   }
   if ('color' in next && next.color instanceof THREE.Color) {
-    next.color = new THREE.Color('#7bd88f');
+    next.color = new THREE.Color(0.5, 0.7, 0.5);
   }
   return next;
 }
@@ -304,6 +304,7 @@ export class TrackingCommand implements CommandTerm {
     }
     const shouldLoop = this.selectedMotion?.loop !== false;
     this.frameAccumulator += dt * this.sampleHz;
+    let motionLooped = false;
     while (this.frameAccumulator >= 1.0) {
       this.refIdx += 1;
       if (this.refIdx >= this.refLen) {
@@ -313,8 +314,12 @@ export class TrackingCommand implements CommandTerm {
           break;
         }
         this.refIdx = 0;
+        motionLooped = true;
       }
       this.frameAccumulator -= 1.0;
+    }
+    if (motionLooped) {
+      this.context.requestReset?.();
     }
     this.updateGhostPose();
   }
@@ -428,6 +433,7 @@ export class TrackingCommand implements CommandTerm {
           } else {
             obj.material = setGhostMaterial(obj.material);
           }
+          obj.renderOrder = 2;
         }
       });
       if (!hasRenderableMesh(clone)) {

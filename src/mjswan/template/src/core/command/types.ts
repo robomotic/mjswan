@@ -57,6 +57,7 @@ export interface CommandTermContext {
   scene: THREE.Scene;
   bodies?: Record<number, THREE.Group> | null;
   mujocoRoot?: THREE.Group | null;
+  requestReset?: () => void;
 }
 
 export interface CommandTerm {

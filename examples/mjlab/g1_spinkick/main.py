@@ -11,7 +11,6 @@ Requirements:
 
 Environment variables:
 - ``MJSWAN_NO_LAUNCH=1``: Build without opening a browser
-- ``MJSWAN_WANDB_RUN_PATH``: Override the default W&B run path
 """
 
 from __future__ import annotations
@@ -26,25 +25,24 @@ import mjswan
 
 from . import terminations  # noqa: F401 - registers custom terminations
 
-DEFAULT_RUN_PATH = "ttktjmt-org/mjlab/mayq0rtd"
-TASK_ID = "Mjlab-Tracking-Flat-Unitree-G1-No-State-Estimation"
-
 
 def setup_builder() -> mjswan.Builder:
     """Create the builder for the G1 spinkick tracking demo."""
     example_dir = Path(__file__).resolve().parent
     os.chdir(example_dir)
 
-    run_path = os.getenv("MJSWAN_WANDB_RUN_PATH", DEFAULT_RUN_PATH)
+    run_path = "ttktjmt-org/mjlab/mayq0rtd"
+    task_id = "Mjlab-Tracking-Flat-Unitree-G1-No-State-Estimation"
+
     builder = mjswan.Builder()
 
     project = builder.add_project(name="mjswan Tracking Demo")
-    scene = project.add_mjlab_scene(TASK_ID, play=True)
+    scene = project.add_mjlab_scene(task_id, play=True)
 
-    env_cfg = load_env_cfg(TASK_ID, play=True)
+    env_cfg = load_env_cfg(task_id, play=True)
     scene.add_policy_from_wandb(
         run_path,
-        task_id=TASK_ID,
+        task_id=task_id,
         observations={"policy": env_cfg.observations["actor"]},
         commands=env_cfg.commands,
         actions=env_cfg.actions,
