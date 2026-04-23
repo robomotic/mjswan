@@ -351,7 +351,7 @@ class ClientBuilder:
                     # Detect local sibling imports (e.g. from './utils') and inline
                     # their content instead of emitting an unresolvable import statement.
                     local_match = re.match(
-                        r"^import\s+\{[^}]+\}\s+from\s+['\"](\./[^'\"]+)['\"];?$",
+                        r"^import\s+(?:type\s+)?\{[^}]+\}\s+from\s+['\"](\./[^'\"]+)['\"];?$",
                         src_line,
                     )
                     if local_match:
@@ -366,6 +366,7 @@ class ClientBuilder:
                                         stripped = (
                                             u_line[len("export ") :]
                                             if u_line.startswith("export ")
+                                            and not u_line.startswith("export default")
                                             else u_line
                                         )
                                         inlined_utils_lines.append(stripped)
@@ -531,7 +532,7 @@ class ClientBuilder:
 
 
 def ensure_node_env(
-    project_dir: Path, node_version: str = "20.4.0", clean: bool = False
+    project_dir: Path, node_version: str = "25.5.0", clean: bool = False
 ) -> Path:
     builder = ClientBuilder(project_dir)
     builder.create_env(clean=clean)

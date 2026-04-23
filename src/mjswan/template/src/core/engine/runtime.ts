@@ -559,6 +559,9 @@ export class mjswanRuntime {
           }
         }
 
+        // Commands are updated after the physics step to match mjlab training-time semantics:
+        // the policy sees command values from the previous step, consistent with how mjlab
+        // computes observations before stepping the environment.
         getCommandManager().update(target);
         getCommandManager().updateDebugVisuals();
       }

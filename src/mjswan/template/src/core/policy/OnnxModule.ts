@@ -110,14 +110,16 @@ export class OnnxModule {
       return;
     }
 
-    this.inKeys = modelInputs.map((name, index) => {
+    this.inKeys = modelInputs.map((name) => {
       if (this.configuredInKeys.includes(name)) {
         return name;
       }
       if (name === 'obs' && this.configuredInKeys.includes('policy')) {
         return 'policy';
       }
-      return this.configuredInKeys[index] ?? name;
+      // No configured key matches this model input by name; pass it through as-is.
+      // runInference will forward it using the model's own input name.
+      return name;
     });
   }
 }

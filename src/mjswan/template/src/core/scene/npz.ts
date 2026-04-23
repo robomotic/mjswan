@@ -112,6 +112,13 @@ function parseNpyBuffer(buffer: Uint8Array): NpzEntry {
     if (strMatch) {
       const width = parseInt(strMatch[1], 10);
       const count = rawData.length / width;
+      const expectedCount = shape.reduce((a, b) => a * b, 1);
+      if (count !== expectedCount) {
+        throw new Error(
+          `npz: byte-string array size mismatch (shape ${shape} expects ${expectedCount} elements, got ${count})`
+        );
+      }
+      // UTF-8 assumed; numpy U<n> (UCS-4) strings are not supported.
       const decoder = new TextDecoder('utf-8');
       const strings: string[] = [];
       for (let i = 0; i < count; i++) {
