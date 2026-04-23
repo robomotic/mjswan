@@ -1,3 +1,3 @@
 # G1 Spinkick Example
 
-https://mjswan-mjlab.pages.dev/
+https://mjswan-spinkick.pages.dev/
