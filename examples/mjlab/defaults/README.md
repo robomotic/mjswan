@@ -1,3 +1,5 @@
 # mjlab Default Tasks
 
-https://mjswan-mjlab.pages.dev/
+Source: https://github.com/mujocolab/mjlab
+
+Demo: https://mjswan-mjlab.pages.dev/

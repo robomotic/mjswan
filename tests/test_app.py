@@ -3,15 +3,15 @@
 L1 — pure Python, no MuJoCo/ONNX required (safe for pre-commit).
 """
 
+import socket as _socket_module
+import socketserver as _socketserver_module
 import sys
 import threading as _threading_module
+import webbrowser as _webbrowser_module
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-import socket as _socket_module
-import socketserver as _socketserver_module
-import webbrowser as _webbrowser_module
 
 from mjswan.app import _detect_colab, mjswanApp
 
