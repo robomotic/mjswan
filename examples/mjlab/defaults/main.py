@@ -10,7 +10,6 @@ from mjlab.tasks.registry import load_env_cfg
 
 import mjswan
 from mjswan.envs.mdp import observations as obs_fns
-from mjswan.wandb_utils import create_pt_onnx_export_context
 
 if __name__ == "__main__" and __package__ is None:
     import sys
@@ -42,12 +41,9 @@ TASK_RUN_ID_MAP: dict[str, str | list[str]] = {
 def main():
     builder = mjswan.Builder(mt=True)
     project = builder.add_project(name="mjlab Tasks")
-    export_contexts = []
 
     for task_id, wandb_run_id in TASK_RUN_ID_MAP.items():
         env_cfg = load_env_cfg(task_id, play=True)
-        export_context = create_pt_onnx_export_context(task_id)
-        export_contexts.append(export_context)
         register_custom_events(env_cfg)
         register_custom_observations(env_cfg)
         register_custom_terminations(env_cfg)
@@ -59,18 +55,13 @@ def main():
         scene.add_policy_from_wandb(
             wandb_paths,
             task_id=task_id,
-            export_context=export_context,
             observations={"policy": env_cfg.observations["actor"]},
             commands=env_cfg.commands,
             actions=env_cfg.actions,
             terminations=env_cfg.terminations,
         )
 
-    try:
-        app = builder.build()
-    finally:
-        for export_context in export_contexts:
-            export_context.close()
+    app = builder.build()
     app.launch()
 
 

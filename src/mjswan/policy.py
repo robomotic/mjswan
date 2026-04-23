@@ -209,6 +209,7 @@ class PolicyHandle:
         body_names: tuple[str, ...] | list[str],
         dataset_joint_names: list[str] | None = None,
         default: bool = False,
+        loop: bool = True,
     ) -> MotionHandle:
         """Add a bundled ``.npz`` reference motion to this policy."""
         motion = MotionConfig(
@@ -227,6 +228,7 @@ class PolicyHandle:
                 )
             ),
             default=default,
+            loop=loop,
         )
         return self._append_motion(motion)
 
@@ -243,6 +245,7 @@ class PolicyHandle:
         body_names: tuple[str, ...] | list[str],
         dataset_joint_names: list[str] | None = None,
         default: bool = False,
+        loop: bool = True,
     ) -> MotionHandle:
         """Download a motion artifact from W&B and attach it to this policy."""
         from .wandb_utils import fetch_motion_npz_from_wandb_run, resolve_wandb_run_path
@@ -270,6 +273,7 @@ class PolicyHandle:
                 )
             ),
             default=default,
+            loop=loop,
         )
         if default:
             for existing in self._config.motions:

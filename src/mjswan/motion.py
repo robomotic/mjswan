@@ -37,6 +37,9 @@ class MotionConfig:
     default: bool = False
     """Whether this motion should be selected by default for the policy."""
 
+    loop: bool = True
+    """Whether the motion restarts from the beginning when it reaches the last frame."""
+
     metadata: dict[str, Any] = field(default_factory=dict)
     """Additional metadata for future extensions."""
 
@@ -60,6 +63,8 @@ class MotionConfig:
             data["dataset_joint_names"] = list(self.dataset_joint_names)
         if self.default:
             data["default"] = True
+        if not self.loop:
+            data["loop"] = False
         if self.metadata:
             data["metadata"] = dict(self.metadata)
         return data

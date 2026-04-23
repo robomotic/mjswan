@@ -12,6 +12,7 @@ export type TrackingMotionConfig = {
   body_names: string[];
   dataset_joint_names?: string[];
   default?: boolean;
+  loop?: boolean;
 };
 
 type LoadedTrackingMotion = TrackingMotionConfig & {
@@ -301,9 +302,18 @@ export class TrackingCommand implements CommandTerm {
       this.updateGhostPose();
       return;
     }
+    const shouldLoop = this.selectedMotion?.loop !== false;
     this.frameAccumulator += dt * this.sampleHz;
-    while (this.frameAccumulator >= 1.0 && this.refIdx < this.refLen - 1) {
+    while (this.frameAccumulator >= 1.0) {
       this.refIdx += 1;
+      if (this.refIdx >= this.refLen) {
+        if (!shouldLoop) {
+          this.refIdx = this.refLen - 1;
+          this.frameAccumulator = 0.0;
+          break;
+        }
+        this.refIdx = 0;
+      }
       this.frameAccumulator -= 1.0;
     }
     this.updateGhostPose();

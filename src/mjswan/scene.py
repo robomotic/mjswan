@@ -7,6 +7,7 @@ managing MuJoCo scenes and their associated policies.
 from __future__ import annotations
 
 import re
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,7 +34,6 @@ if TYPE_CHECKING:
     from .managers.observation_manager import ObservationGroupCfg
     from .managers.termination_manager import TerminationTermCfg
     from .project import ProjectHandle
-    from .wandb_utils import PtOnnxExportContext
 
 
 def _get_scene_model(scene_config: SceneConfig) -> mujoco.MjModel | None:
@@ -314,7 +314,6 @@ class SceneHandle:
         *,
         only_latest: bool = False,
         task_id: str | None = None,
-        export_context: PtOnnxExportContext | None = None,
         config_path: str | None = None,
         metadata: dict[str, Any] | None = None,
         observations: dict[str, ObservationGroupCfg] | dict[str, Any] | None = None,
@@ -435,43 +434,72 @@ class SceneHandle:
             assert task_id is not None
             from .wandb_utils import (
                 create_pt_onnx_export_context,
+                fetch_motion_npz_from_wandb_run,
                 fetch_pt_onnx_from_wandb_run,
             )
 
-            owned_export_context = export_context is None
-            export_context = export_context or create_pt_onnx_export_context(task_id)
-            try:
-                for path in run_paths:
-                    for name, model in fetch_pt_onnx_from_wandb_run(
-                        path, task_id, export_context=export_context
-                    ):
-                        if name in seen_names:
-                            continue
-                        seen_names.add(name)
-                        handle = self.add_policy(
-                            name=name,
-                            policy=model,
-                            config_path=config_path,
-                            metadata=metadata,
-                            observations=observations,
-                            commands=commands,
-                            actions=actions,
-                            terminations=terminations,
-                            policy_joint_names=export_context.joint_names or None,
-                            default_joint_pos=export_context.default_joint_pos or None,
-                            encoder_bias=export_context.encoder_bias or None,
-                            extras=extras,
+            with tempfile.TemporaryDirectory() as staging_dir:
+                env_cfg: Any = None
+                if tracking_motion_term is not None:
+                    existing_file = getattr(tracking_motion_term, "motion_file", None)
+                    if existing_file and Path(existing_file).is_file():
+                        motion_name = Path(existing_file).stem
+                        motion_bytes = Path(existing_file).read_bytes()
+                        motion_file_for_env = existing_file
+                    else:
+                        motion_name, motion_bytes = fetch_motion_npz_from_wandb_run(
+                            run_paths[0]
                         )
-                        _attach_tracking_motion(
-                            handle,
-                            path,
-                            tracking_motion_term,
-                            tracking_motion_cache,
-                            dataset_joint_names=export_context.joint_names or None,
+                        staged = Path(staging_dir) / f"{motion_name}.npz"
+                        staged.write_bytes(motion_bytes)
+                        motion_file_for_env = str(staged)
+                    for rp in run_paths:
+                        tracking_motion_cache.setdefault(
+                            rp, (motion_name, motion_bytes)
                         )
-                        handles.append(handle)
-            finally:
-                if owned_export_context:
+
+                    try:
+                        from mjlab.tasks.registry import load_env_cfg as _load_env_cfg
+                    except ImportError as exc:
+                        raise ImportError(
+                            "mjlab is required to resolve the tracking motion for export."
+                        ) from exc
+                    env_cfg = _load_env_cfg(task_id, play=True)
+                    env_cfg.commands["motion"].motion_file = motion_file_for_env  # type: ignore[attr-defined]
+
+                export_context = create_pt_onnx_export_context(task_id, env_cfg=env_cfg)
+                try:
+                    for path in run_paths:
+                        for name, model in fetch_pt_onnx_from_wandb_run(
+                            path, task_id, export_context=export_context
+                        ):
+                            if name in seen_names:
+                                continue
+                            seen_names.add(name)
+                            handle = self.add_policy(
+                                name=name,
+                                policy=model,
+                                config_path=config_path,
+                                metadata=metadata,
+                                observations=observations,
+                                commands=commands,
+                                actions=actions,
+                                terminations=terminations,
+                                policy_joint_names=export_context.joint_names or None,
+                                default_joint_pos=export_context.default_joint_pos
+                                or None,
+                                encoder_bias=export_context.encoder_bias or None,
+                                extras=extras,
+                            )
+                            _attach_tracking_motion(
+                                handle,
+                                path,
+                                tracking_motion_term,
+                                tracking_motion_cache,
+                                dataset_joint_names=export_context.joint_names or None,
+                            )
+                            handles.append(handle)
+                finally:
                     export_context.close()
 
         if handles:

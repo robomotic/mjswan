@@ -294,23 +294,18 @@ def fetch_motion_npz_from_wandb_artifact(
 def fetch_pt_onnx_from_wandb_run(
     run_path: str,
     task_id: str,
-    export_context: PtOnnxExportContext | None = None,
+    export_context: PtOnnxExportContext,
 ) -> list[tuple[str, onnx.ModelProto]]:
     """Download all ``model_*.pt`` checkpoints from a W&B run and convert each to ONNX.
 
     Checkpoints are sorted by training step before conversion, so the returned
     list is ordered from earliest to latest (e.g. ``model_0``, ``model_50``, …).
 
-    The mjlab environment is constructed once and reused across all checkpoints
-    to avoid repeated startup cost.  Requires ``mjlab`` and ``torch`` to be
-    installed.
-
     Args:
         run_path: W&B run path in the format ``"entity/project/run_id"``.
-        task_id: mjlab task identifier (e.g. ``"go2_flat"``). Used to
-            reconstruct the environment and runner required for ONNX export.
-        export_context: Optional pre-built export context. When provided,
-            this context is reused and **not** closed by this function.
+        task_id: mjlab task identifier (e.g. ``"go2_flat"``).
+        export_context: Pre-built export context. Reused across all checkpoints
+            and **not** closed by this function.
 
     Returns:
         List of ``(policy_name, onnx_model)`` tuples sorted by training step.
@@ -333,44 +328,32 @@ def fetch_pt_onnx_from_wandb_run(
     pt_files.sort(key=lambda f: int(re.search(r"\d+", f.name).group()))  # type: ignore[union-attr]
 
     results: list[tuple[str, onnx.ModelProto]] = []
-    context = (
-        export_context
-        if export_context is not None
-        else create_pt_onnx_export_context(task_id)
-    )
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
-        try:
-            for wandb_file in pt_files:
-                wandb_file.download(root=tmp_dir, replace=True)
-                pt_path = tmp_path / wandb_file.name
-                name = pt_path.stem  # e.g. "model_0", "model_50"
-                onnx_filename = f"{name}.onnx"
+        for wandb_file in pt_files:
+            wandb_file.download(root=tmp_dir, replace=True)
+            pt_path = tmp_path / wandb_file.name
+            name = pt_path.stem  # e.g. "model_0", "model_50"
+            onnx_filename = f"{name}.onnx"
 
-                context.runner.load(
-                    str(pt_path),
-                    load_cfg={"actor": True},
-                    strict=True,
-                    map_location="cpu",
-                )
-                context.runner.export_policy_to_onnx(tmp_dir, onnx_filename)
+            export_context.runner.load(
+                str(pt_path),
+                load_cfg={"actor": True},
+                strict=True,
+                map_location="cpu",
+            )
+            export_context.runner.export_policy_to_onnx(tmp_dir, onnx_filename)
 
-                model = onnx.load(str(tmp_path / onnx_filename))
-                results.append((name, model))
-        finally:
-            if export_context is None:
-                context.close()
+            model = onnx.load(str(tmp_path / onnx_filename))
+            results.append((name, model))
 
     return results
 
 
 __all__ = [
-    "PtOnnxExportContext",
-    "create_pt_onnx_export_context",
     "fetch_motion_npz_from_wandb_artifact",
     "fetch_motion_npz_from_wandb_run",
     "fetch_onnx_from_wandb_run",
-    "fetch_pt_onnx_from_wandb_run",
     "resolve_wandb_artifact_path",
     "resolve_wandb_run_path",
 ]
