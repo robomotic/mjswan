@@ -10,17 +10,18 @@ from pathlib import Path
 
 import gymnasium.logger as gym_logger
 import mujoco
+import mujoco.mjx as _mjx
 import onnx
 from mujoco_playground import registry
 
 # Suppress gymnasium logger output from myosuite
 _prev_gym_level = gym_logger.min_level
-gym_logger.set_level(gym_logger.DISABLED)
+gym_logger.min_level = gym_logger.ERROR
 
 from myosuite import gym_registry_specs  # noqa: E402
 from myosuite.envs.myo import myochallenge  # noqa: E402, F401 - for env registration
 
-gym_logger.set_level(_prev_gym_level)
+gym_logger.min_level = _prev_gym_level
 
 from robot_descriptions._descriptions import DESCRIPTIONS  # noqa: E402
 
@@ -544,39 +545,50 @@ def _add_robot_descriptions_project(builder: mjswan.Builder) -> None:
 def _add_playground_project(builder: mjswan.Builder) -> None:
     project = builder.add_project(name="MuJoCo Playground", id="playground")
 
-    for env_name in registry.ALL_ENVS:
-        if "Sparse" in env_name:
-            continue
+    # TEMPORARY PATCH:
+    # Force JAX backend for all environments: mujoco_playground inconsistently
+    # migrated to warp as the default — some envs pass impl via config, others
+    # call mjx.put_model() with no impl at all. Patching here covers both cases.
+    # TODO: Once mujoco_playground fixes all envs to respect config_overrides,
+    # replace this patch with simply: registry.load(env_name, config_overrides={"impl": "jax"})
+    _orig_put_model = _mjx.put_model
+    _mjx.put_model = lambda m, **kw: _orig_put_model(m, **{**kw, "impl": "jax"})
+    try:
+        for env_name in registry.ALL_ENVS:
+            if "Sparse" in env_name:
+                continue
 
-        env = registry.load(env_name)
-        with open(env.xml_path) as f:
-            xml_content = f.read()
-        spec = mujoco.MjSpec.from_string(xml_content, env.model_assets)
+            env = registry.load(env_name)
+            with open(env.xml_path) as f:
+                xml_content = f.read()
+            spec = mujoco.MjSpec.from_string(xml_content, env.model_assets)
 
-        # model_assets is consumed at parse time but not stored in spec.assets.
-        # Remap basename keys (as in env.model_assets) to the effective paths
-        # that spec.to_xml() looks up: dir/file (or just file when dir is empty).
-        mesh_dir = spec.meshdir or ""
-        tex_dir = spec.texturedir or ""
+            # model_assets is consumed at parse time but not stored in spec.assets.
+            # Remap basename keys (as in env.model_assets) to the effective paths
+            # that spec.to_xml() looks up: dir/file (or just file when dir is empty).
+            mesh_dir = spec.meshdir or ""
+            tex_dir = spec.texturedir or ""
 
-        def _add(directory: str, filename: str) -> None:
-            if not filename:
-                return
-            key = posixpath.join(directory, filename) if directory else filename
-            basename = os.path.basename(key)
-            if basename in env.model_assets:
-                spec.assets[key] = env.model_assets[basename]
+            def _add(directory: str, filename: str) -> None:
+                if not filename:
+                    return
+                key = posixpath.join(directory, filename) if directory else filename
+                basename = os.path.basename(key)
+                if basename in env.model_assets:
+                    spec.assets[key] = env.model_assets[basename]
 
-        for mesh in spec.meshes:
-            _add(mesh_dir, mesh.file)
-        for texture in spec.textures:
-            _add(tex_dir, texture.file)
-            for cf in texture.cubefiles:
-                _add(tex_dir, cf)
-        for hfield in spec.hfields:
-            _add("", hfield.file)
+            for mesh in spec.meshes:
+                _add(mesh_dir, mesh.file)
+            for texture in spec.textures:
+                _add(tex_dir, texture.file)
+                for cf in texture.cubefiles:
+                    _add(tex_dir, cf)
+            for hfield in spec.hfields:
+                _add("", hfield.file)
 
-        project.add_scene(name=env_name, spec=spec)
+            project.add_scene(name=env_name, spec=spec)
+    finally:
+        _mjx.put_model = _orig_put_model
 
 
 def _add_myosuite_project(builder: mjswan.Builder) -> None:
