@@ -4,13 +4,6 @@ This example exercises mjswan's mjlab tracking playback path end-to-end:
 - MuJoCo scene from mjlab's play config
 - policy checkpoints exported from a W&B training run
 - reference motion auto-imported from the run's motion artifact
-
-Requirements:
-- ``mjlab``, ``torch``, and ``wandb`` must be installed
-- W&B must already be authenticated for the target run
-
-Environment variables:
-- ``MJSWAN_NO_LAUNCH=1``: Build without opening a browser
 """
 
 from __future__ import annotations
@@ -36,7 +29,7 @@ def setup_builder() -> mjswan.Builder:
 
     builder = mjswan.Builder()
 
-    project = builder.add_project(name="mjswan Tracking Demo")
+    project = builder.add_project(name="mjlab Spinkick")
     scene = project.add_mjlab_scene(task_id, play=True)
 
     env_cfg = load_env_cfg(task_id, play=True)

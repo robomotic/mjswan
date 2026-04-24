@@ -28,6 +28,7 @@ pole_angle_cos_sin = obs_fns.joint_pos_cos_sin  # cartpole semantic alias
 ENTITY = "ttktjmt-org"
 PROJECT = "mjlab"
 TASK_RUN_ID_MAP: dict[str, str | list[str]] = {
+    # TODO: Add custom mdp conponents for cartpole tasks
     # "Mjlab-Cartpole-Balance": "cartpole-balance-v2",
     # "Mjlab-Cartpole-Swingup": "cartpole-swingup",
     "Mjlab-Lift-Cube-Yam": "ajfybu8m",

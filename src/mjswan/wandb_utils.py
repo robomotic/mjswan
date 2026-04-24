@@ -245,7 +245,7 @@ def fetch_onnx_from_wandb_run(run_path: str) -> tuple[str, onnx.ModelProto]:
 
 
 def fetch_motion_npz_from_wandb_run(run_path: str) -> tuple[str, bytes]:
-    """Download the ``motion.npz`` artifact used by a W&B run."""
+    """Download the ``motion.npz`` artifact used or logged by a W&B run."""
     import wandb
 
     api = wandb.Api()
