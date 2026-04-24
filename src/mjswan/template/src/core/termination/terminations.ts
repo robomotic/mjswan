@@ -14,7 +14,7 @@ export class TimeOut extends TerminationBase {
   constructor(config: TerminationConfig) {
     super(config);
     const params = config.params ?? {};
-    this.maxSteps = (params.max_episode_length as number) ?? 1000;
+    this.maxSteps = (params.max_episode_length as number) ?? Infinity;
   }
 
   evaluate(): boolean {
