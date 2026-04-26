@@ -191,6 +191,11 @@ class Builder:
                             "name": scene.name,
                             "path": f"{name2id(scene.name)}/{scene.scene_filename}",
                             **(
+                                {"metadata": scene.metadata}
+                                if scene.metadata
+                                else {}
+                            ),
+                            **(
                                 {
                                     "splats": [
                                         self._build_splat_config_dict(scene, s)

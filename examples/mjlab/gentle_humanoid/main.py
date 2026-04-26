@@ -188,6 +188,13 @@ def setup_builder() -> mjswan.Builder:
         spec=mujoco.MjSpec.from_file(
             str(gentle_humanoid_root / "assets" / "g1" / "g1.xml")
         ),
+        metadata={
+            "panelHtml": [
+                'Training code: <a href="https://github.com/Axellwppr/motion_tracking" '
+                'target="_blank" rel="noopener noreferrer">'
+                "github.com/Axellwppr/motion_tracking</a>"
+            ]
+        },
     )
     scene.set_viewer_config(
         mjswan.ViewerConfig(

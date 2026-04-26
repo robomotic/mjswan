@@ -62,6 +62,23 @@ interface AppConfig {
 const PANEL_QUERY_PARAM = 'panel';
 const REF_QUERY_PARAM = 'ref';
 
+function normalizePanelHtml(value: unknown): string[] {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? [trimmed] : [];
+  }
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((entry): string[] => {
+    if (typeof entry !== 'string') {
+      return [];
+    }
+    const trimmed = entry.trim();
+    return trimmed ? [trimmed] : [];
+  });
+}
+
 function getProjectIdFromLocation(): string | null {
   const base = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '/');
   const pathname = window.location.pathname;
@@ -401,6 +418,12 @@ function AppContent() {
     if (!selectedSplat) return customSplatUrl ? { name: 'Custom', url: customSplatUrl } : null;
     return resolvedSplats.find((s) => s.name === selectedSplat) ?? null;
   }, [resolvedSplats, selectedSplat, customSplatUrl]);
+
+  const panelHtml = useMemo(
+    () => normalizePanelHtml(currentScene?.metadata?.panelHtml),
+    [currentScene?.metadata]
+  );
+
   const projectOptions = useMemo(() => {
     if (!config) {
       return [] as { value: string; label: string }[];
@@ -640,6 +663,7 @@ function AppContent() {
           onMotionChange={handleMotionChange}
           showReferenceMotion={showReferenceMotion}
           onShowReferenceMotionChange={handleShowReferenceChange}
+          panelHtml={panelHtml}
           commandsEnabled={!!policyConfigPath}
         />
         <MjswanViewer
