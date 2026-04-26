@@ -5,6 +5,7 @@ export {
 } from './CommandManager';
 export type {
   ButtonCommandConfig,
+  CheckboxCommandConfig,
   CommandConfigEntry,
   CommandDefinition,
   CommandEvent,

@@ -14,7 +14,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypeAlias
 
-CommandType = Literal["slider", "button"]
+CommandType = Literal["slider", "button", "checkbox"]
 
 
 @dataclass
@@ -26,6 +26,8 @@ class SliderConfig:
     range: tuple[float, float] = (-1.0, 1.0)
     default: float = 0.0
     step: float = 0.01
+    enabled_when: str | None = None
+    """Optional input name in the same command group that enables this slider."""
 
     @property
     def min(self) -> float:
@@ -36,7 +38,7 @@ class SliderConfig:
         return self.range[1]
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "type": "slider",
             "name": self.name,
             "label": self.label,
@@ -45,9 +47,32 @@ class SliderConfig:
             "step": self.step,
             "default": self.default,
         }
+        if self.enabled_when is not None:
+            data["enabled_when"] = self.enabled_when
+        return data
 
 
 Slider = SliderConfig
+
+
+@dataclass
+class CheckboxConfig:
+    """Configuration for a checkbox input exposed by a command term."""
+
+    name: str
+    label: str
+    default: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "type": "checkbox",
+            "name": self.name,
+            "label": self.label,
+            "default": self.default,
+        }
+
+
+Checkbox = CheckboxConfig
 
 
 @dataclass
@@ -67,7 +92,7 @@ class ButtonConfig:
 
 Button = ButtonConfig
 
-CommandInput: TypeAlias = SliderConfig | ButtonConfig
+CommandInput: TypeAlias = SliderConfig | ButtonConfig | CheckboxConfig
 
 
 @dataclass
@@ -198,6 +223,8 @@ register_command_term(
 __all__ = [
     "Button",
     "ButtonConfig",
+    "Checkbox",
+    "CheckboxConfig",
     "CommandInput",
     "CommandTermConfig",
     "CommandTermSpec",

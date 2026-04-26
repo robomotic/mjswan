@@ -128,6 +128,34 @@ function parseNpyBuffer(buffer: Uint8Array): NpzEntry {
       }
       return { shape, data: new Float32Array(0), strings };
     }
+    // Handle NumPy Unicode dtype: <U<n> / >U<n> / =U<n> (UCS-4 codepoints).
+    const unicodeMatch = dtype.match(/^U(\d+)$/);
+    if (unicodeMatch) {
+      const width = parseInt(unicodeMatch[1], 10);
+      const bytesPerItem = width * 4;
+      const count = rawData.length / bytesPerItem;
+      const expectedCount = shape.reduce((a, b) => a * b, 1);
+      if (count !== expectedCount) {
+        throw new Error(
+          `npz: unicode array size mismatch (shape ${shape} expects ${expectedCount} elements, got ${count})`
+        );
+      }
+      const view = new DataView(rawData.buffer, rawData.byteOffset, rawData.byteLength);
+      const littleEndian = !needsSwap;
+      const strings: string[] = [];
+      for (let i = 0; i < count; i++) {
+        const codepoints: number[] = [];
+        for (let j = 0; j < width; j++) {
+          const codepoint = view.getUint32(i * bytesPerItem + j * 4, littleEndian);
+          if (codepoint === 0) {
+            break;
+          }
+          codepoints.push(codepoint);
+        }
+        strings.push(String.fromCodePoint(...codepoints));
+      }
+      return { shape, data: new Float32Array(0), strings };
+    }
     throw new Error(`Unsupported numpy dtype: ${descr}`);
   }
 

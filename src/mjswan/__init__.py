@@ -10,6 +10,8 @@ from .builder import Builder
 from .command import (
     Button,
     ButtonConfig,
+    Checkbox,
+    CheckboxConfig,
     CommandInput,
     CommandTermConfig,
     CommandTermSpec,
@@ -73,6 +75,8 @@ __all__ = [
     "SliderConfig",
     "Button",
     "ButtonConfig",
+    "Checkbox",
+    "CheckboxConfig",
     "CommandInput",
     "CommandTermConfig",
     "CommandTermSpec",
