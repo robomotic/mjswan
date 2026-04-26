@@ -176,6 +176,10 @@ def setup_builder() -> mjswan.Builder:
             strict=True,
         )
     }
+    default_compliance_force = min(
+        20.0,
+        max(10.0, float(tracking_cfg.get("compliance_flag_threshold", 10.0))),
+    )
 
     builder = mjswan.Builder()
     project = builder.add_project(name="Gentle Humanoid Tracking")
@@ -217,14 +221,17 @@ def setup_builder() -> mjswan.Builder:
                 [
                     mjswan.CheckboxConfig(
                         name="enabled",
-                        label="Compliance",
+                        label=(
+                            "Compliance (turn off for motions with hand-ground "
+                            "contact)"
+                        ),
                         default=bool(float(tracking_cfg.get("compliance_flag_value", 1.0))),
                     ),
                     mjswan.SliderConfig(
                         name="force",
                         label="Force",
-                        range=(0.0, 50.0),
-                        default=float(tracking_cfg.get("compliance_flag_threshold", 10.0)),
+                        range=(10.0, 20.0),
+                        default=default_compliance_force,
                         step=0.5,
                         enabled_when="enabled",
                     ),
@@ -247,7 +254,7 @@ def setup_builder() -> mjswan.Builder:
                                 tracking_cfg.get("compliance_flag_value", 1.0)
                             ),
                             "default_force": float(
-                                tracking_cfg.get("compliance_flag_threshold", 10.0)
+                                default_compliance_force
                             ),
                         },
                     ),
