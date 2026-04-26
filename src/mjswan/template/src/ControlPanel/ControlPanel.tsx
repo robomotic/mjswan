@@ -63,7 +63,6 @@ interface ControlPanelProps {
   onMotionChange: (value: string | null) => void;
   showReferenceMotion: boolean;
   onShowReferenceMotionChange: (value: boolean) => void;
-  panelHtml?: string[];
   /** Whether command controls are enabled */
   commandsEnabled?: boolean;
   /** Callback when reset button is pressed */
@@ -210,7 +209,6 @@ function ControlPanel(props: ControlPanelProps) {
     onMotionChange,
     showReferenceMotion,
     onShowReferenceMotionChange,
-    panelHtml = [],
     commandsEnabled = false,
     onReset,
   } = props;
@@ -636,21 +634,6 @@ function ControlPanel(props: ControlPanelProps) {
 
           {/* Reset Button - always at bottom */}
           <Divider mb="xs" mx="xs" />
-          {panelHtml.length > 0 && (
-            <Box px="xs" pb="xs">
-              <Stack gap="0.25em">
-                {panelHtml.map((html, index) => (
-                  <Text
-                    key={`${index}:${html}`}
-                    size="xs"
-                    c="dimmed"
-                    style={{ overflowWrap: 'anywhere' }}
-                    dangerouslySetInnerHTML={{ __html: html }}
-                  />
-                ))}
-              </Stack>
-            </Box>
-          )}
           <Box px="xs" pb="xs">
             <Button
               variant="light"

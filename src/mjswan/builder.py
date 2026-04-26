@@ -190,7 +190,6 @@ class Builder:
                         {
                             "name": scene.name,
                             "path": f"{name2id(scene.name)}/{scene.scene_filename}",
-                            **({"metadata": scene.metadata} if scene.metadata else {}),
                             **(
                                 {
                                     "splats": [
