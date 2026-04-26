@@ -229,10 +229,11 @@ def setup_builder() -> mjswan.Builder:
                     mjswan.CheckboxConfig(
                         name="enabled",
                         label=(
-                            "Compliance (turn off for motions with hand-ground "
-                            "contact)"
+                            "Compliance (turn off for motions with hand-ground contact)"
                         ),
-                        default=bool(float(tracking_cfg.get("compliance_flag_value", 1.0))),
+                        default=bool(
+                            float(tracking_cfg.get("compliance_flag_value", 1.0))
+                        ),
                     ),
                     mjswan.SliderConfig(
                         name="force",
@@ -260,9 +261,7 @@ def setup_builder() -> mjswan.Builder:
                             "default_enabled": float(
                                 tracking_cfg.get("compliance_flag_value", 1.0)
                             ),
-                            "default_force": float(
-                                default_compliance_force
-                            ),
+                            "default_force": float(default_compliance_force),
                         },
                     ),
                     "target_joint_pos": ObservationTermCfg(
@@ -299,20 +298,26 @@ def setup_builder() -> mjswan.Builder:
                     "joint_pos": ObservationTermCfg(
                         func=obs_funcs["joint_pos"],
                         params={
-                            "history_steps": list(tracking_cfg["joint_pos_history_steps"]),
+                            "history_steps": list(
+                                tracking_cfg["joint_pos_history_steps"]
+                            ),
                             "num_joints": len(action_joint_names),
                         },
                     ),
                     "joint_vel": ObservationTermCfg(
                         func=obs_funcs["joint_vel"],
                         params={
-                            "history_steps": list(tracking_cfg["joint_vel_history_steps"]),
+                            "history_steps": list(
+                                tracking_cfg["joint_vel_history_steps"]
+                            ),
                             "num_joints": len(action_joint_names),
                         },
                     ),
                     "prev_actions": ObservationTermCfg(
                         func=obs_funcs["prev_actions"],
-                        params={"history_steps": int(tracking_cfg["prev_action_steps"])},
+                        params={
+                            "history_steps": int(tracking_cfg["prev_action_steps"])
+                        },
                     ),
                 }
             )

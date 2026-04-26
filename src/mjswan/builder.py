@@ -190,11 +190,7 @@ class Builder:
                         {
                             "name": scene.name,
                             "path": f"{name2id(scene.name)}/{scene.scene_filename}",
-                            **(
-                                {"metadata": scene.metadata}
-                                if scene.metadata
-                                else {}
-                            ),
+                            **({"metadata": scene.metadata} if scene.metadata else {}),
                             **(
                                 {
                                     "splats": [
@@ -508,7 +504,10 @@ class Builder:
                                         meta = dict(onnx_config.get("meta") or {})
                                         if "in_keys" in data and "in_keys" not in meta:
                                             meta["in_keys"] = data["in_keys"]
-                                        if "out_keys" in data and "out_keys" not in meta:
+                                        if (
+                                            "out_keys" in data
+                                            and "out_keys" not in meta
+                                        ):
                                             meta["out_keys"] = data["out_keys"]
                                         if meta:
                                             onnx_config["meta"] = meta
