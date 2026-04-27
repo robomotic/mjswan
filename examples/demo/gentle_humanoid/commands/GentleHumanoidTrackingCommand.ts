@@ -183,6 +183,7 @@ function hasRenderableMesh(object: THREE.Object3D): boolean {
 export class GentleHumanoidTrackingCommand implements CommandTerm {
   private readonly context: CommandTermContext;
   private readonly motions: GentleHumanoidMotionConfig[];
+  // The demo has a small fixed motion set; keep loaded clips cached to avoid repeated NPZ fetch/parse work.
   private readonly loadedMotions = new Map<string, MotionFrames>();
   private readonly targetJointNames: string[];
   private readonly qposAdr: number[];
@@ -198,7 +199,6 @@ export class GentleHumanoidTrackingCommand implements CommandTerm {
   private readonly refMaxLen: number;
   private frameAccumulator = 0.0;
   private sampleHz = 50.0;
-  private currentName = 'default';
   private selectedMotionName: string | null = 'default';
   private currentDone = true;
   private referenceVisible = true;
@@ -230,8 +230,9 @@ export class GentleHumanoidTrackingCommand implements CommandTerm {
     );
     this.transitionSteps = Math.max(0, Math.floor(typeof config.transition_steps === 'number' ? config.transition_steps : 100));
     this.refMaxLen = Math.max(0, Math.floor(typeof config.ref_max_len === 'number' ? config.ref_max_len : 2048));
-    this.qposAdr = this.resolveQposAdr(this.targetJointNames);
-    this.qvelAdr = this.resolveQvelAdr(this.targetJointNames);
+    const modelJointNames = context.mjModel ? this.getJointNames(context.mjModel) : null;
+    this.qposAdr = this.resolveQposAdr(this.targetJointNames, modelJointNames);
+    this.qvelAdr = this.resolveQvelAdr(this.targetJointNames, modelJointNames);
     const rootJointIndex = this.findFreeJointIndex();
     this.rootQposAdr = rootJointIndex >= 0 && context.mjModel ? context.mjModel.jnt_qposadr[rootJointIndex] : 0;
     this.rootQvelAdr = rootJointIndex >= 0 && context.mjModel ? context.mjModel.jnt_dofadr[rootJointIndex] : 0;
@@ -243,7 +244,6 @@ export class GentleHumanoidTrackingCommand implements CommandTerm {
       this.motions.find((motion) => motion.name === 'default')?.name ??
       this.motions[0]?.name ??
       null;
-    this.currentName = this.selectedMotionName ?? 'default';
   }
 
   getCommand(): Float32Array {
@@ -261,7 +261,7 @@ export class GentleHumanoidTrackingCommand implements CommandTerm {
     if (!config) {
       return false;
     }
-    if (!((this.currentName === 'default' || nextName === 'default') && this.currentDone)) {
+    if (!this.currentDone) {
       return false;
     }
 
@@ -270,7 +270,6 @@ export class GentleHumanoidTrackingCommand implements CommandTerm {
     const segment = this.buildAppendSegment(loaded);
     this.appendRefFrames(segment);
     this.sampleHz = loaded.fps;
-    this.currentName = nextName;
     this.selectedMotionName = nextName;
     this.currentDone = this.refIdx >= this.refLen - 1;
     this.applyReferenceStateToSim();
@@ -632,14 +631,13 @@ export class GentleHumanoidTrackingCommand implements CommandTerm {
     return -1;
   }
 
-  private resolveQposAdr(jointNames: string[]): number[] {
+  private resolveQposAdr(jointNames: string[], availableJointNames: string[] | null): number[] {
     const mjModel = this.context.mjModel;
-    if (!mjModel) {
+    if (!mjModel || !availableJointNames) {
       return Array.from({ length: jointNames.length }, () => 0);
     }
-    const available = this.getJointNames(mjModel);
     return jointNames.map((name) => {
-      const idx = available.indexOf(name);
+      const idx = availableJointNames.indexOf(name);
       if (idx < 0) {
         throw new Error(`GentleHumanoidTrackingCommand: joint "${name}" not found in model`);
       }
@@ -647,14 +645,13 @@ export class GentleHumanoidTrackingCommand implements CommandTerm {
     });
   }
 
-  private resolveQvelAdr(jointNames: string[]): number[] {
+  private resolveQvelAdr(jointNames: string[], availableJointNames: string[] | null): number[] {
     const mjModel = this.context.mjModel;
-    if (!mjModel) {
+    if (!mjModel || !availableJointNames) {
       return Array.from({ length: jointNames.length }, () => 0);
     }
-    const available = this.getJointNames(mjModel);
     return jointNames.map((name) => {
-      const idx = available.indexOf(name);
+      const idx = availableJointNames.indexOf(name);
       if (idx < 0) {
         throw new Error(`GentleHumanoidTrackingCommand: joint "${name}" not found in model`);
       }

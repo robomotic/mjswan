@@ -1,18 +1,19 @@
 import { CustomCommands } from './custom_commands';
 import { TrackingCommand } from './TrackingCommand';
-import type {
-  ButtonCommandConfig,
-  CheckboxCommandConfig,
-  CommandConfigEntry,
-  CommandDefinition,
-  CommandEvent,
-  CommandEventListener,
-  CommandInputConfig,
-  CommandTerm,
-  CommandTermConstructor,
-  CommandTermContext,
-  CommandsConfig,
-  SliderCommandConfig,
+import {
+  getCommandInputId,
+  type ButtonCommandConfig,
+  type CheckboxCommandConfig,
+  type CommandConfigEntry,
+  type CommandDefinition,
+  type CommandEvent,
+  type CommandEventListener,
+  type CommandInputConfig,
+  type CommandTerm,
+  type CommandTermConstructor,
+  type CommandTermContext,
+  type CommandsConfig,
+  type SliderCommandConfig,
 } from './types';
 
 type ValueCommandConfig = SliderCommandConfig | CheckboxCommandConfig;
@@ -285,8 +286,9 @@ export class CommandManager {
   }
 
   private registerSystemReset(): void {
-    this.commands.set('_system:reset', {
-      id: '_system:reset',
+    const id = getCommandInputId('_system', 'reset');
+    this.commands.set(id, {
+      id,
       groupName: '_system',
       config: {
         type: 'button',
@@ -294,7 +296,7 @@ export class CommandManager {
         label: 'Reset Simulation',
       } satisfies ButtonCommandConfig,
     });
-    this.commandGroups.set('_system', ['_system:reset']);
+    this.commandGroups.set('_system', [id]);
   }
 
   private registerUi(groupName: string, term: CommandTerm): void {
@@ -305,7 +307,7 @@ export class CommandManager {
     }
     this.commandGroups.set(groupName, []);
     for (const input of inputs) {
-      const id = `${groupName}:${input.name}`;
+      const id = getCommandInputId(groupName, input.name);
       this.commands.set(id, { id, groupName, config: input });
       this.commandGroups.get(groupName)!.push(id);
       if (input.type === 'slider' || input.type === 'checkbox') {

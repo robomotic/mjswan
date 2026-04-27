@@ -24,6 +24,7 @@ import { LabeledInput } from './LabeledInput';
 import { CommandSection } from './CommandSection';
 import { SplatSection } from './SplatSection';
 import {
+  getCommandInputId,
   getCommandManager,
   type CheckboxCommandConfig,
   type CommandDefinition,
@@ -620,7 +621,7 @@ function ControlPanel(props: ControlPanelProps) {
                           disabled={!commandsEnabled}
                           enabledWhenValue={
                             command.config.enabled_when
-                              ? values[`${command.groupName}:${command.config.enabled_when}`]
+                              ? values[getCommandInputId(command.groupName, command.config.enabled_when)]
                               : undefined
                           }
                         />

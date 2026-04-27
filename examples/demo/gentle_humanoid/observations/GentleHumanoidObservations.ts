@@ -170,6 +170,7 @@ export class GentleHumanoidBootIndicator extends ObservationBase {
   }
 
   compute(): Float32Array {
+    // The browser replay has no deployment boot phase, so keep this policy flag disabled.
     return new Float32Array([0.0]);
   }
 }
@@ -283,7 +284,7 @@ export class GentleHumanoidTargetRootZObs extends ObservationBase {
     const indices = clampIndices(tracking.refIdx, this.futureSteps, tracking.refLen);
     const out = new Float32Array(indices.length);
     for (let i = 0; i < indices.length; i++) {
-      out[i] = (tracking.refRootPos[indices[i]][2] ?? 0.0) + 0.035;
+      out[i] = tracking.refRootPos[indices[i]][2] ?? 0.0;
     }
     return out;
   }

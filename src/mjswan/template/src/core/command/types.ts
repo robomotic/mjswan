@@ -47,6 +47,10 @@ export interface CommandDefinition {
   config: CommandInputConfig;
 }
 
+export function getCommandInputId(groupName: string, inputName: string): string {
+  return `${groupName}:${inputName}`;
+}
+
 export type CommandEventType = 'change' | 'reset' | 'button' | 'group_registered' | 'clear';
 
 export interface CommandEvent {
