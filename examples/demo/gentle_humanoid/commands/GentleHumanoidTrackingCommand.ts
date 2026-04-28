@@ -256,21 +256,34 @@ export class GentleHumanoidTrackingCommand implements CommandTerm {
   }
 
   async setSelectedMotion(name: string | null): Promise<boolean> {
-    const nextName = name ?? this.selectedMotionName ?? 'default';
-    const config = this.motions.find((motion) => motion.name === nextName);
-    if (!config) {
-      return false;
-    }
-    if (!this.currentDone) {
+    if (name === null) {
+      this.selectedMotionName = null;
+      this.refJointPos = [];
+      this.refRootPos = [];
+      this.refRootQuat = [];
+      this.refIdx = 0;
+      this.refLen = 0;
+      this.frameAccumulator = 0.0;
+      this.currentDone = true;
+      this.updateGhostPose();
       return false;
     }
 
-    const loaded = this.loadedMotions.get(nextName) ?? await this.loadMotion(config);
-    this.loadedMotions.set(nextName, loaded);
-    const segment = this.buildAppendSegment(loaded);
-    this.appendRefFrames(segment);
+    const config = this.motions.find((motion) => motion.name === name);
+    if (!config) {
+      return false;
+    }
+
+    const loaded = this.loadedMotions.get(name) ?? await this.loadMotion(config);
+    this.loadedMotions.set(name, loaded);
+    this.refJointPos = loaded.jointPos;
+    this.refRootPos = loaded.rootPos;
+    this.refRootQuat = loaded.rootQuat;
+    this.refIdx = 0;
+    this.refLen = loaded.frameCount;
+    this.frameAccumulator = 0.0;
     this.sampleHz = loaded.fps;
-    this.selectedMotionName = nextName;
+    this.selectedMotionName = name;
     this.currentDone = this.refIdx >= this.refLen - 1;
     this.applyReferenceStateToSim();
     this.updateGhostPose();
@@ -304,7 +317,6 @@ export class GentleHumanoidTrackingCommand implements CommandTerm {
       this.currentDone = this.refIdx >= this.refLen - 1;
       this.frameAccumulator -= 1.0;
     }
-    this.trimRefPrefix();
     this.updateGhostPose();
   }
 
