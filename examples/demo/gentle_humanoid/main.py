@@ -107,6 +107,15 @@ def _default_motion_npz(tracking_cfg: dict[str, Any]) -> bytes:
     return payload.getvalue()
 
 
+def _ensure_default_motion_file(tracking_cfg: dict[str, Any]) -> Path:
+    path = HERE / ".dep" / "generated" / "gentle_humanoid_default_motion.npz"
+    payload = _default_motion_npz(tracking_cfg)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists() or path.read_bytes() != payload:
+        path.write_bytes(payload)
+    return path
+
+
 def _register_gentle_humanoid_extensions() -> dict[str, mjswan.ObsFunc]:
     mjswan.register_command_term(
         "GentleHumanoidTrackingCommandCfg",
@@ -329,9 +338,9 @@ def setup_builder() -> mjswan.Builder:
         default=True,
     )
 
-    policy.add_motion_data(
+    policy.add_motion(
         name="default",
-        data=_default_motion_npz(tracking_cfg),
+        source=str(_ensure_default_motion_file(tracking_cfg)),
         fps=50.0,
         anchor_body_name="pelvis",
         body_names=("pelvis",),

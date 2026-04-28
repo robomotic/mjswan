@@ -232,39 +232,6 @@ class PolicyHandle:
         )
         return self._append_motion(motion)
 
-    def add_motion_data(
-        self,
-        *,
-        name: str,
-        data: bytes,
-        fps: float = 50.0,
-        anchor_body_name: str,
-        body_names: tuple[str, ...] | list[str],
-        dataset_joint_names: list[str] | None = None,
-        default: bool = False,
-        loop: bool = True,
-    ) -> MotionHandle:
-        """Add an in-memory ``.npz`` reference motion to this policy."""
-        motion = MotionConfig(
-            name=name,
-            data=data,
-            fps=fps,
-            anchor_body_name=anchor_body_name,
-            body_names=tuple(body_names),
-            dataset_joint_names=(
-                list(dataset_joint_names)
-                if dataset_joint_names is not None
-                else (
-                    list(self._config.policy_joint_names)
-                    if self._config.policy_joint_names is not None
-                    else None
-                )
-            ),
-            default=default,
-            loop=loop,
-        )
-        return self._append_motion(motion)
-
     def add_motion_from_wandb(
         self,
         *,
