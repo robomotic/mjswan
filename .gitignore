@@ -60,11 +60,10 @@ __pycache__/
 mjswan-*.tgz
 
 # Claude
-.claude/*
+.claude/
+.agents/
 !.claude/settings.json
 !.claude/commands/
-.claude/commands/*
-!.claude/commands/*.md
 !.claude/CLAUDE.md
 
 # Auto-generated at build time

@@ -583,7 +583,7 @@ function AppContent() {
     setSelectedMotion(value);
     const result = runtimeRef.current?.setSelectedMotion(value);
     void result?.then((accepted) => {
-      if (accepted === false) {
+      if (accepted === false && value !== null) {
         setSelectedMotion(runtimeRef.current?.getSelectedMotionName() ?? previousMotion);
       }
     });
