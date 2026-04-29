@@ -362,7 +362,7 @@ class Builder:
                 output_path,
                 dirs_exist_ok=True,
                 ignore=shutil.ignore_patterns(
-                    ".nodeenv", "__pycache__", "*.pyc", ".md"
+                    ".nodeenv", "__pycache__", "*.pyc", ".md", "_mt"
                 ),
             )
 

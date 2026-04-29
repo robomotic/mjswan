@@ -200,10 +200,10 @@ def setup_builder() -> mjswan.Builder:
     )
     scene.set_viewer_config(
         mjswan.ViewerConfig(
-            lookat=(0.0, 0.0, 0.8),
-            distance=3.5,
-            elevation=-20.0,
-            azimuth=120.0,
+            lookat=(0, 0, 0),
+            distance=3,
+            elevation=-10,
+            azimuth=30,
         )
     )
 
