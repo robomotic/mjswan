@@ -24,7 +24,9 @@ import { LabeledInput } from './LabeledInput';
 import { CommandSection } from './CommandSection';
 import { SplatSection } from './SplatSection';
 import {
+  getCommandInputId,
   getCommandManager,
+  type CheckboxCommandConfig,
   type CommandDefinition,
   type SliderCommandConfig,
 } from '../core/command';
@@ -102,13 +104,17 @@ function SliderControl({
   value,
   onChange,
   disabled,
+  enabledWhenValue,
 }: {
   command: CommandDefinition;
   value: number;
   onChange: (id: string, value: number) => void;
   disabled?: boolean;
+  enabledWhenValue?: number;
 }) {
   const config = command.config as SliderCommandConfig;
+  const dependencyDisabled = config.enabled_when !== undefined && (enabledWhenValue ?? 0) < 0.5;
+  const isDisabled = disabled || dependencyDisabled;
 
   return (
     <Box
@@ -140,7 +146,7 @@ function SliderControl({
           max={config.max}
           step={config.step}
           size="xs"
-          disabled={disabled}
+          disabled={isDisabled}
           styles={{
             root: { padding: '0' },
             track: { height: 4 },
@@ -148,6 +154,32 @@ function SliderControl({
           }}
         />
       </Box>
+    </Box>
+  );
+}
+
+function CheckboxControl({
+  command,
+  value,
+  onChange,
+  disabled,
+}: {
+  command: CommandDefinition;
+  value: number;
+  onChange: (id: string, value: number) => void;
+  disabled?: boolean;
+}) {
+  const config = command.config as CheckboxCommandConfig;
+
+  return (
+    <Box pb="0.5em" px="xs">
+      <Checkbox
+        label={config.label}
+        checked={value >= 0.5}
+        onChange={(event) => onChange(command.id, event.currentTarget.checked ? 1.0 : 0.0)}
+        size="xs"
+        disabled={disabled}
+      />
     </Box>
   );
 }
@@ -273,10 +305,9 @@ function ControlPanel(props: ControlPanelProps) {
     }
   }, [onReset]);
 
-  // Get slider commands for a specific group
-  const getSliderCommandsForGroup = (groupName: string): CommandDefinition[] => {
+  const getValueCommandsForGroup = (groupName: string): CommandDefinition[] => {
     return commands.filter(
-      (cmd) => cmd.groupName === groupName && cmd.config.type === 'slider'
+      (cmd) => cmd.groupName === groupName && (cmd.config.type === 'slider' || cmd.config.type === 'checkbox')
     );
   };
 
@@ -554,10 +585,10 @@ function ControlPanel(props: ControlPanelProps) {
           )}
 
           {/* Command Groups - only show if there are commands */}
-          {commandGroups.length > 0 && commands.filter(cmd => cmd.config.type === 'slider').length > 0 && (
+          {commandGroups.length > 0 && commands.some(cmd => cmd.config.type === 'slider' || cmd.config.type === 'checkbox') && (
             <>
               {commandGroups.map((groupName) => {
-                const groupCommands = getSliderCommandsForGroup(groupName);
+                const groupCommands = getValueCommandsForGroup(groupName);
                 if (groupCommands.length === 0) return null;
 
                 return (
@@ -566,15 +597,36 @@ function ControlPanel(props: ControlPanelProps) {
                     label={formatGroupName(groupName)}
                     expandByDefault={true}
                   >
-                    {groupCommands.map((command) => (
-                      <SliderControl
-                        key={command.id}
-                        command={command}
-                        value={values[command.id] ?? 0}
-                        onChange={handleSliderChange}
-                        disabled={!commandsEnabled}
-                      />
-                    ))}
+                    {groupCommands.map((command) => {
+                      if (command.config.type === 'checkbox') {
+                        return (
+                          <CheckboxControl
+                            key={command.id}
+                            command={command}
+                            value={values[command.id] ?? 0}
+                            onChange={handleSliderChange}
+                            disabled={!commandsEnabled}
+                          />
+                        );
+                      }
+                      if (command.config.type !== 'slider') {
+                        return null;
+                      }
+                      return (
+                        <SliderControl
+                          key={command.id}
+                          command={command}
+                          value={values[command.id] ?? 0}
+                          onChange={handleSliderChange}
+                          disabled={!commandsEnabled}
+                          enabledWhenValue={
+                            command.config.enabled_when
+                              ? values[getCommandInputId(command.groupName, command.config.enabled_when)]
+                              : undefined
+                          }
+                        />
+                      );
+                    })}
                   </CommandSection>
                 );
               })}

@@ -196,12 +196,17 @@ class ClientBuilder:
         seen_imports: list[str] = []
         class_bodies: list[str] = []
         class_names: list[str] = []
+        seen_sources: set[Path] = set()
         for sentinel in custom_entries.values():
             src_path = Path(sentinel.ts_src).expanduser().resolve()  # type: ignore[arg-type]
             if not src_path.exists():
                 raise FileNotFoundError(
                     f"Custom observation ts_src not found: {src_path}"
                 )
+            class_names.append(sentinel.ts_name)
+            if src_path in seen_sources:
+                continue
+            seen_sources.add(src_path)
             src_lines = src_path.read_text().splitlines()
             body_lines = []
             for src_line in src_lines:
@@ -211,7 +216,6 @@ class ClientBuilder:
                 else:
                     body_lines.append(src_line)
             class_bodies.append("\n".join(body_lines).strip())
-            class_names.append(sentinel.ts_name)
 
         # Emit deduplicated imports, then class bodies, then the registry map
         lines.extend(seen_imports)
@@ -265,10 +269,15 @@ class ClientBuilder:
         seen_imports: list[str] = []
         class_bodies: list[str] = []
         class_names: list[str] = []
+        seen_sources: set[Path] = set()
         for spec in custom_entries.values():
             src_path = Path(spec.ts_src).expanduser().resolve()  # type: ignore[arg-type]
             if not src_path.exists():
                 raise FileNotFoundError(f"Custom command ts_src not found: {src_path}")
+            class_names.append(spec.ts_name)
+            if src_path in seen_sources:
+                continue
+            seen_sources.add(src_path)
             src_lines = src_path.read_text().splitlines()
             body_lines = []
             for src_line in src_lines:
@@ -278,7 +287,6 @@ class ClientBuilder:
                 else:
                     body_lines.append(src_line)
             class_bodies.append("\n".join(body_lines).strip())
-            class_names.append(spec.ts_name)
 
         lines.extend(seen_imports)
         lines.append("")

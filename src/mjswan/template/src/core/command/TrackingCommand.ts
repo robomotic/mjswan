@@ -233,8 +233,7 @@ export class TrackingCommand implements CommandTerm {
   }
 
   async setSelectedMotion(name: string | null): Promise<boolean> {
-    const nextName = name ?? this.selectedMotionName;
-    if (!nextName) {
+    if (name === null) {
       this.selectedMotionName = null;
       this.selectedMotion = null;
       this.refJointPos = [];
@@ -250,14 +249,14 @@ export class TrackingCommand implements CommandTerm {
       return false;
     }
 
-    const config = this.motions.find((motion) => motion.name === nextName);
+    const config = this.motions.find((motion) => motion.name === name);
     if (!config) {
       return false;
     }
 
-    const loaded = this.loadedMotions.get(nextName) ?? await this.loadMotion(config);
-    this.loadedMotions.set(nextName, loaded);
-    this.selectedMotionName = nextName;
+    const loaded = this.loadedMotions.get(name) ?? await this.loadMotion(config);
+    this.loadedMotions.set(name, loaded);
+    this.selectedMotionName = name;
     this.selectedMotion = loaded;
     this.selectedAnchorBodyIndex = Math.max(
       0,

@@ -362,7 +362,7 @@ class Builder:
                 output_path,
                 dirs_exist_ok=True,
                 ignore=shutil.ignore_patterns(
-                    ".nodeenv", "__pycache__", "*.pyc", ".md"
+                    ".nodeenv", "__pycache__", "*.pyc", ".md", "_mt"
                 ),
             )
 
@@ -498,7 +498,18 @@ class Builder:
                                         data = json.load(f)
                                     data.setdefault("onnx", {})
                                     if isinstance(data["onnx"], dict):
-                                        data["onnx"]["path"] = policy_path.name
+                                        onnx_config = data["onnx"]
+                                        onnx_config["path"] = policy_path.name
+                                        meta = dict(onnx_config.get("meta") or {})
+                                        if "in_keys" in data and "in_keys" not in meta:
+                                            meta["in_keys"] = data["in_keys"]
+                                        if (
+                                            "out_keys" in data
+                                            and "out_keys" not in meta
+                                        ):
+                                            meta["out_keys"] = data["out_keys"]
+                                        if meta:
+                                            onnx_config["meta"] = meta
                                     # Serialize commands if any are defined
                                     if policy.commands:
                                         data["commands"] = {

@@ -401,6 +401,7 @@ function AppContent() {
     if (!selectedSplat) return customSplatUrl ? { name: 'Custom', url: customSplatUrl } : null;
     return resolvedSplats.find((s) => s.name === selectedSplat) ?? null;
   }, [resolvedSplats, selectedSplat, customSplatUrl]);
+
   const projectOptions = useMemo(() => {
     if (!config) {
       return [] as { value: string; label: string }[];
@@ -578,9 +579,15 @@ function AppContent() {
   );
 
   const handleMotionChange = useCallback((value: string | null) => {
+    const previousMotion = selectedMotion;
     setSelectedMotion(value);
-    void runtimeRef.current?.setSelectedMotion(value);
-  }, []);
+    const result = runtimeRef.current?.setSelectedMotion(value);
+    void result?.then((accepted) => {
+      if (accepted === false && value !== null) {
+        setSelectedMotion(runtimeRef.current?.getSelectedMotionName() ?? previousMotion);
+      }
+    });
+  }, [selectedMotion]);
 
   const handleShowReferenceChange = useCallback((value: boolean) => {
     setShowReferenceMotion(value);

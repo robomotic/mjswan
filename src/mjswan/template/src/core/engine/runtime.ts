@@ -34,7 +34,6 @@ import type { PolicyConfig } from '../policy/types';
 import { TrackingPolicy } from '../policy/modules/TrackingPolicy';
 import { LocomotionPolicy } from '../policy/modules/LocomotionPolicy';
 import { getCommandManager, type CommandTermContext, type CommandsConfig } from '../command';
-import { TrackingCommand } from '../command/TrackingCommand';
 import { EventManager } from '../event/EventManager';
 import { Events } from '../event/events';
 import type { TerrainData } from '../event/EventBase';
@@ -42,6 +41,20 @@ import type { TerrainData } from '../event/EventBase';
 type RuntimeOptions = {
   baseUrl?: string;
 };
+
+type MotionCommandTerm = {
+  setSelectedMotion(name: string | null): Promise<boolean> | boolean;
+  setReferenceVisible?(visible: boolean): void;
+  getSelectedMotionName?(): string | null;
+};
+
+function isMotionCommandTerm(term: unknown): term is MotionCommandTerm {
+  return (
+    typeof term === 'object' &&
+    term !== null &&
+    typeof (term as MotionCommandTerm).setSelectedMotion === 'function'
+  );
+}
 
 /** Thrown when a scene exceeds the browser's 2 GB WebAssembly memory limit. */
 export class WasmMemoryLimitError extends Error {
@@ -361,18 +374,29 @@ export class mjswanRuntime {
     console.log('[mjswanRuntime] Simulation reset');
   }
 
-  async setSelectedMotion(motionName: string | null): Promise<void> {
+  async setSelectedMotion(motionName: string | null): Promise<boolean> {
     const term = getCommandManager().getTerm('motion');
-    if (!(term instanceof TrackingCommand)) {
-      return;
+    if (!isMotionCommandTerm(term)) {
+      return false;
     }
-    await term.setSelectedMotion(motionName);
-    this.resetSimulation();
+    const accepted = await term.setSelectedMotion(motionName);
+    if (accepted) {
+      this.resetSimulation();
+    }
+    return accepted;
+  }
+
+  getSelectedMotionName(): string | null {
+    const term = getCommandManager().getTerm('motion');
+    if (!isMotionCommandTerm(term)) {
+      return null;
+    }
+    return term.getSelectedMotionName?.() ?? null;
   }
 
   setReferenceVisible(visible: boolean): void {
     const term = getCommandManager().getTerm('motion');
-    if (!(term instanceof TrackingCommand)) {
+    if (!isMotionCommandTerm(term) || typeof term.setReferenceVisible !== 'function') {
       return;
     }
     term.setReferenceVisible(visible);
@@ -617,7 +641,7 @@ export class mjswanRuntime {
           ),
         }));
       }
-      if (config.commands?.motion?.name === 'TrackingCommand' && Array.isArray(config.motions)) {
+      if (config.commands?.motion && Array.isArray(config.motions)) {
         config.commands.motion = {
           ...config.commands.motion,
           motions: config.motions,
@@ -640,13 +664,13 @@ export class mjswanRuntime {
         });
         getCommandManager().resetTerms();
         const motionTerm = getCommandManager().getTerm('motion');
-        if (motionTerm instanceof TrackingCommand) {
+        if (isMotionCommandTerm(motionTerm)) {
           await motionTerm.setSelectedMotion(
             config.motions?.find((motion) => motion.default)?.name
               ?? config.motions?.[0]?.name
               ?? null
           );
-          motionTerm.setReferenceVisible(true);
+          motionTerm.setReferenceVisible?.(true);
         }
         this.mujoco.mj_forward(this.mjModel, this.mjData);
         this.updateCachedState();

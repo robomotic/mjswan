@@ -3,8 +3,10 @@ export {
   getCommandManager,
   resetCommandManager,
 } from './CommandManager';
+export { getCommandInputId } from './types';
 export type {
   ButtonCommandConfig,
+  CheckboxCommandConfig,
   CommandConfigEntry,
   CommandDefinition,
   CommandEvent,

@@ -1,7 +1,7 @@
 import type * as THREE from 'three';
 import type { MainModule, MjData, MjModel } from 'mujoco';
 
-export type CommandType = 'slider' | 'button';
+export type CommandType = 'slider' | 'button' | 'checkbox';
 
 export interface SliderCommandConfig {
   type: 'slider';
@@ -11,6 +11,7 @@ export interface SliderCommandConfig {
   max: number;
   step: number;
   default: number;
+  enabled_when?: string;
 }
 
 export interface ButtonCommandConfig {
@@ -19,7 +20,14 @@ export interface ButtonCommandConfig {
   label: string;
 }
 
-export type CommandInputConfig = SliderCommandConfig | ButtonCommandConfig;
+export interface CheckboxCommandConfig {
+  type: 'checkbox';
+  name: string;
+  label: string;
+  default: boolean;
+}
+
+export type CommandInputConfig = SliderCommandConfig | ButtonCommandConfig | CheckboxCommandConfig;
 
 export interface CommandUiConfig {
   inputs?: CommandInputConfig[];
@@ -37,6 +45,10 @@ export interface CommandDefinition {
   id: string;
   groupName: string;
   config: CommandInputConfig;
+}
+
+export function getCommandInputId(groupName: string, inputName: string): string {
+  return `${groupName}:${inputName}`;
 }
 
 export type CommandEventType = 'change' | 'reset' | 'button' | 'group_registered' | 'clear';

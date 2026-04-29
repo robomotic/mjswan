@@ -1,18 +1,22 @@
 import { CustomCommands } from './custom_commands';
 import { TrackingCommand } from './TrackingCommand';
-import type {
-  ButtonCommandConfig,
-  CommandConfigEntry,
-  CommandDefinition,
-  CommandEvent,
-  CommandEventListener,
-  CommandInputConfig,
-  CommandTerm,
-  CommandTermConstructor,
-  CommandTermContext,
-  CommandsConfig,
-  SliderCommandConfig,
+import {
+  getCommandInputId,
+  type ButtonCommandConfig,
+  type CheckboxCommandConfig,
+  type CommandConfigEntry,
+  type CommandDefinition,
+  type CommandEvent,
+  type CommandEventListener,
+  type CommandInputConfig,
+  type CommandTerm,
+  type CommandTermConstructor,
+  type CommandTermContext,
+  type CommandsConfig,
+  type SliderCommandConfig,
 } from './types';
+
+type ValueCommandConfig = SliderCommandConfig | CheckboxCommandConfig;
 
 class UiCommand implements CommandTerm {
   private readonly inputs: CommandInputConfig[];
@@ -28,15 +32,21 @@ class UiCommand implements CommandTerm {
     for (const input of this.inputs) {
       if (input.type === 'slider') {
         this.values.set(input.name, input.default);
+      } else if (input.type === 'checkbox') {
+        this.values.set(input.name, input.default ? 1.0 : 0.0);
       }
     }
   }
 
   getCommand(): Float32Array {
-    const sliderInputs = this.inputs.filter((input): input is SliderCommandConfig => input.type === 'slider');
-    const values = new Float32Array(sliderInputs.length);
-    for (let i = 0; i < sliderInputs.length; i++) {
-      values[i] = this.values.get(sliderInputs[i].name) ?? sliderInputs[i].default ?? 0.0;
+    const valueInputs = this.inputs.filter(
+      (input): input is ValueCommandConfig => input.type === 'slider' || input.type === 'checkbox'
+    );
+    const values = new Float32Array(valueInputs.length);
+    for (let i = 0; i < valueInputs.length; i++) {
+      const input = valueInputs[i];
+      const fallback = input.type === 'checkbox' ? (input.default ? 1.0 : 0.0) : input.default;
+      values[i] = this.values.get(input.name) ?? fallback ?? 0.0;
     }
     return values;
   }
@@ -49,16 +59,24 @@ class UiCommand implements CommandTerm {
     for (const input of this.inputs) {
       if (input.type === 'slider') {
         this.values.set(input.name, input.default);
+      } else if (input.type === 'checkbox') {
+        this.values.set(input.name, input.default ? 1.0 : 0.0);
       }
     }
   }
 
   setValue(inputName: string, value: number): number {
     const input = this.inputs.find(
-      (entry): entry is SliderCommandConfig => entry.type === 'slider' && entry.name === inputName
+      (entry): entry is SliderCommandConfig | CheckboxCommandConfig =>
+        (entry.type === 'slider' || entry.type === 'checkbox') && entry.name === inputName
     );
     if (!input) {
       return 0.0;
+    }
+    if (input.type === 'checkbox') {
+      const normalized = value >= 0.5 ? 1.0 : 0.0;
+      this.values.set(input.name, normalized);
+      return normalized;
     }
     const clamped = Math.max(input.min, Math.min(input.max, value));
     this.values.set(input.name, clamped);
@@ -185,7 +203,7 @@ export class CommandManager {
 
   setValue(id: string, value: number): void {
     const command = this.commands.get(id);
-    if (!command || command.config.type !== 'slider') {
+    if (!command || (command.config.type !== 'slider' && command.config.type !== 'checkbox')) {
       return;
     }
     const term = this.terms.get(command.groupName);
@@ -268,8 +286,9 @@ export class CommandManager {
   }
 
   private registerSystemReset(): void {
-    this.commands.set('_system:reset', {
-      id: '_system:reset',
+    const id = getCommandInputId('_system', 'reset');
+    this.commands.set(id, {
+      id,
       groupName: '_system',
       config: {
         type: 'button',
@@ -277,7 +296,7 @@ export class CommandManager {
         label: 'Reset Simulation',
       } satisfies ButtonCommandConfig,
     });
-    this.commandGroups.set('_system', ['_system:reset']);
+    this.commandGroups.set('_system', [id]);
   }
 
   private registerUi(groupName: string, term: CommandTerm): void {
@@ -288,15 +307,16 @@ export class CommandManager {
     }
     this.commandGroups.set(groupName, []);
     for (const input of inputs) {
-      const id = `${groupName}:${input.name}`;
+      const id = getCommandInputId(groupName, input.name);
       this.commands.set(id, { id, groupName, config: input });
       this.commandGroups.get(groupName)!.push(id);
-      if (input.type === 'slider') {
+      if (input.type === 'slider' || input.type === 'checkbox') {
         const current = term.getCommand();
-        const sliderIndex = inputs
-          .filter((entry): entry is SliderCommandConfig => entry.type === 'slider')
+        const valueIndex = inputs
+          .filter((entry): entry is ValueCommandConfig => entry.type === 'slider' || entry.type === 'checkbox')
           .findIndex(entry => entry.name === input.name);
-        this.values.set(id, current[sliderIndex] ?? input.default);
+        const fallback = input.type === 'checkbox' ? (input.default ? 1.0 : 0.0) : input.default;
+        this.values.set(id, current[valueIndex] ?? fallback);
       }
     }
     this.emit({
@@ -308,7 +328,7 @@ export class CommandManager {
 
   private syncValuesFromTerms(): void {
     for (const [id, command] of this.commands) {
-      if (command.config.type !== 'slider') {
+      if (command.config.type !== 'slider' && command.config.type !== 'checkbox') {
         continue;
       }
       const term = this.terms.get(command.groupName);
@@ -316,10 +336,10 @@ export class CommandManager {
         continue;
       }
       const inputs = term.getUiConfig?.()?.inputs ?? [];
-      const sliderInputs = inputs.filter(
-        (entry): entry is SliderCommandConfig => entry.type === 'slider'
+      const valueInputs = inputs.filter(
+        (entry): entry is ValueCommandConfig => entry.type === 'slider' || entry.type === 'checkbox'
       );
-      const index = sliderInputs.findIndex(entry => entry.name === command.config.name);
+      const index = valueInputs.findIndex(entry => entry.name === command.config.name);
       if (index >= 0) {
         const current = term.getCommand();
         this.values.set(id, current[index] ?? this.values.get(id) ?? 0.0);
