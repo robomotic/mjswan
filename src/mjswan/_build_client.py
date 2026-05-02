@@ -511,6 +511,7 @@ class ClientBuilder:
         base_path: str = "/",
         gtm_id: str | None = None,
         mt: bool = False,
+        debug: bool = False,
     ) -> None:
         try:
             self.create_env(clean=clean)
@@ -526,6 +527,8 @@ class ClientBuilder:
                 env["MJSWAN_GTM_ID"] = gtm_id
             if mt:
                 env["MJSWAN_MT"] = "1"
+            if debug:
+                env["MJSWAN_DEBUG"] = "1"
             self.run_build_script("build", env=env)
             print("✓ Build completed successfully")
         except subprocess.CalledProcessError as e:

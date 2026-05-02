@@ -22,6 +22,7 @@ function getVersionFromPython(): string {
 }
 
 const isMt = process.env.MJSWAN_MT === '1';
+const isDebug = process.env.MJSWAN_DEBUG === '1';
 const coiSwPath = path.resolve(__dirname, '_mt/coi-serviceworker.js');
 
 function mtPlugin(enabled: boolean): Plugin | null {
@@ -89,6 +90,9 @@ function gtmPlugin(gtmId: string | undefined) {
 
 export default defineConfig({
   plugins: [react(), vanillaExtractPlugin(), mtPlugin(isMt), gtmPlugin(process.env.MJSWAN_GTM_ID)],
+  esbuild: {
+    drop: isDebug ? [] : ['console', 'debugger'],
+  },
   base: process.env.MJSWAN_BASE_PATH || '/',
   define: {
     __APP_VERSION__: JSON.stringify(getVersionFromPython()),

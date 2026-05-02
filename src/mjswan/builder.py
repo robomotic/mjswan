@@ -44,6 +44,7 @@ class Builder:
         base_path: str = "/",
         gtm_id: str | None = None,
         mt: bool = False,
+        debug: bool = False,
     ) -> None:
         """Initialize a new Builder instance.
 
@@ -53,11 +54,14 @@ class Builder:
             mt: Enable multi-threaded MuJoCo WASM. Requires COOP/COEP headers — these are
                 written as a ``_headers`` file (Netlify/Cloudflare Pages/Vercel) and a
                 service worker (required for GitHub Pages hosting). Defaults to False.
+            debug: Keep browser console messages in the built app. Defaults to False
+                (console messages are stripped from the production bundle).
         """
         self._projects: list[ProjectConfig] = []
         self._base_path = base_path
         self._gtm_id = gtm_id
         self._mt = mt
+        self._debug = debug
 
     @classmethod
     def from_mjlab(
@@ -69,6 +73,7 @@ class Builder:
         base_path: str = "/",
         gtm_id: str | None = None,
         mt: bool = False,
+        debug: bool = False,
     ) -> Builder:
         """Create a Builder pre-configured with a single mjlab task.
 
@@ -99,7 +104,7 @@ class Builder:
             app = builder.build()
             ```
         """
-        builder = cls(base_path=base_path, gtm_id=gtm_id, mt=mt)
+        builder = cls(base_path=base_path, gtm_id=gtm_id, mt=mt, debug=debug)
         project = builder.add_project(name=project_name)
         project.add_mjlab_scene(task_id, play=play)
         return builder
@@ -354,6 +359,7 @@ class Builder:
                     base_path=self._base_path,
                     gtm_id=self._gtm_id,
                     mt=self._mt,
+                    debug=self._debug,
                 )
 
             # Copy all files from template to output_path
