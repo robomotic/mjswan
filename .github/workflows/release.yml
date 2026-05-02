@@ -17,6 +17,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Ensure workflow runs from main
+        run: |
+          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            echo "::error::This workflow can only be run from the main branch. Current ref: ${{ github.ref }}"
+            exit 1
+          fi
 
       - name: Validate version format
         run: |
@@ -25,10 +34,12 @@ jobs:
             exit 1
           fi
 
-      - name: Check tag does not already exist
+      - name: Check release does not already exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if git rev-parse "v${{ inputs.version }}" >/dev/null 2>&1; then
-            echo "::error::Tag v${{ inputs.version }} already exists"
+          if gh release view "v${{ inputs.version }}" >/dev/null 2>&1; then
+            echo "::error::Release v${{ inputs.version }} already exists"
             exit 1
           fi
 
@@ -47,21 +58,21 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add src/mjswan/__init__.py src/mjswan/template/package.json
-          git commit -m "Bump version to ${{ inputs.version }}"
-          git push
+          if git diff --cached --quiet; then
+            echo "Version already at ${{ inputs.version }}, skipping commit"
+          else
+            git commit -m "Bump version to ${{ inputs.version }}"
+            git push
+          fi
 
       - name: Create and push tag
         run: |
-          git tag -a "v${{ inputs.version }}" -m "Release v${{ inputs.version }}"
-          git push origin "v${{ inputs.version }}"
-
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "v${{ inputs.version }}" \
-            --title "v${{ inputs.version }}" \
-            --generate-notes
+          if git ls-remote --tags origin "refs/tags/v${{ inputs.version }}" | grep -q .; then
+            echo "Tag v${{ inputs.version }} already exists, skipping"
+          else
+            git tag -a "v${{ inputs.version }}" -m "Release v${{ inputs.version }}"
+            git push origin "v${{ inputs.version }}"
+          fi
 
   publish-pypi:
     needs: release
@@ -78,3 +89,25 @@ jobs:
     with:
       ref: v${{ inputs.version }}
     secrets: inherit
+
+  create-release:
+    needs:
+      - publish-pypi
+      - publish-npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for i in 1 2 3; do
+            gh release create "v${{ inputs.version }}" \
+              --title "v${{ inputs.version }}" \
+              --generate-notes && exit 0
+            echo "Attempt $i failed, retrying in 15s..."
+            [ $i -lt 3 ] && sleep 15
+          done
+          exit 1
