@@ -102,9 +102,11 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           for i in 1 2 3; do
             gh release create "v${{ inputs.version }}" \
+              --repo "${GH_REPO}" \
               --title "v${{ inputs.version }}" \
               --generate-notes && exit 0
             echo "Attempt $i failed, retrying in 15s..."
