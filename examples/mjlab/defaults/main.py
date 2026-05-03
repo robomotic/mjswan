@@ -37,6 +37,46 @@ TASK_RUN_ID_MAP: dict[str, str | list[str]] = {
     "Mjlab-Velocity-Rough-Unitree-G1": ["mowqlkd5", "sif72y3p", "rsb8tc3g", "7veqaznf"],
     "Mjlab-Velocity-Rough-Unitree-Go1": ["basgo8hx", "ad4peite"],
 }
+TASK_VIEWER_CONFIG_MAP: dict[str, mjswan.ViewerConfig] = {
+    "Mjlab-Lift-Cube-Yam": mjswan.ViewerConfig(
+        lookat=(0.2, 0.0, 0.4),
+        distance=2.0,
+        elevation=-20.0,
+        azimuth=45.0,
+    ),
+    "Mjlab-Velocity-Flat-Unitree-G1": mjswan.ViewerConfig(
+        lookat=(0.0, 0.0, 0.0),
+        distance=3.0,
+        elevation=-20.0,
+        azimuth=0.0,
+        origin_type=mjswan.ViewerConfig.OriginType.ASSET_BODY,
+        body_name="torso_link",
+    ),
+    "Mjlab-Velocity-Flat-Unitree-Go1": mjswan.ViewerConfig(
+        lookat=(0.0, 0.0, 0.0),
+        distance=2.0,
+        elevation=-10.0,
+        azimuth=0.0,
+        origin_type=mjswan.ViewerConfig.OriginType.ASSET_BODY,
+        body_name="trunk",
+    ),
+    "Mjlab-Velocity-Rough-Unitree-G1": mjswan.ViewerConfig(
+        lookat=(0.0, 0.0, 0.0),
+        distance=4.0,
+        elevation=-20.0,
+        azimuth=30.0,
+        origin_type=mjswan.ViewerConfig.OriginType.ASSET_BODY,
+        body_name="torso_link",
+    ),
+    "Mjlab-Velocity-Rough-Unitree-Go1": mjswan.ViewerConfig(
+        lookat=(0.0, 0.0, 0.0),
+        distance=4.0,
+        elevation=-20.0,
+        azimuth=30.0,
+        origin_type=mjswan.ViewerConfig.OriginType.ASSET_BODY,
+        body_name="trunk",
+    ),
+}
 
 
 def main():
@@ -49,6 +89,8 @@ def main():
         register_custom_observations(env_cfg)
         register_custom_terminations(env_cfg)
         scene = project.add_mjlab_scene(task_id, play=True)
+        if viewer_cfg := TASK_VIEWER_CONFIG_MAP.get(task_id):
+            scene.set_viewer_config(viewer_cfg)
         run_ids = wandb_run_id
         if isinstance(run_ids, str):
             run_ids = [run_ids]
