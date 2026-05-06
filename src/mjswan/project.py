@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 import mujoco
 
+from .adapters import apply_mjlab_sim_options, ensure_mjlab_extensions
 from .scene import SceneConfig, SceneHandle
 from .utils import collect_spec_assets
 from .viewer_config import ViewerConfig
@@ -148,10 +149,12 @@ class ProjectHandle:
                 "Install it with: pip install mjlab"
             ) from e
 
+        ensure_mjlab_extensions()
         env_cfg = load_env_cfg(task_id, play=play)
         env_cfg.scene.num_envs = 1
         scene = Scene(env_cfg.scene, device="cpu")
         scene.spec.assets.update(_collect_mjlab_scene_assets(env_cfg.scene))
+        apply_mjlab_sim_options(scene.spec, getattr(env_cfg, "sim", None))
         handle = self.add_scene(spec=scene.spec, name=task_id)
         viewer_cfg = _adapt_mjlab_viewer_config(getattr(env_cfg, "viewer", None))
         if viewer_cfg is not None:

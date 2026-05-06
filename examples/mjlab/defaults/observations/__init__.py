@@ -7,7 +7,9 @@ custom observation classes used in mjlab tasks.
 import os
 from typing import Any
 
+import mjswan
 from mjswan import ObsFunc, register_obs_func
+from mjswan.envs.mdp import observations as obs_fns
 
 _OBS_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -26,6 +28,66 @@ register_obs_func(
         ts_src=os.path.join(_OBS_DIR, "ObjectToGoalDistance.ts"),
     ),
 )
+
+register_obs_func(
+    "pole_angle_cos_sin",
+    obs_fns.joint_pos_cos_sin,
+)
+
+
+def get_policy_observations(task_id: str, env_cfg: Any) -> dict[str, Any]:
+    """Return browser-safe policy observations for the given mjlab task."""
+    if task_id not in {"Mjlab-Cartpole-Balance", "Mjlab-Cartpole-Swingup"}:
+        return {"policy": env_cfg.observations["actor"]}
+
+    actor = env_cfg.observations["actor"]
+    terms = actor.terms
+    return {
+        "policy": mjswan.ObservationGroupCfg(
+            terms={
+                "cart_pos": mjswan.ObservationTermCfg(
+                    func=obs_fns.joint_pos_rel,
+                    params={
+                        "entity_name": "cartpole",
+                        "joint_names": ["slider"],
+                    },
+                    scale=getattr(terms["cart_pos"], "scale", None),
+                    clip=getattr(terms["cart_pos"], "clip", None),
+                    history_length=getattr(terms["cart_pos"], "history_length", 0),
+                ),
+                "pole_angle": mjswan.ObservationTermCfg(
+                    func=obs_fns.joint_pos_cos_sin,
+                    params={"joint_name": "cartpole/hinge_1"},
+                    scale=getattr(terms["pole_angle"], "scale", None),
+                    clip=getattr(terms["pole_angle"], "clip", None),
+                    history_length=getattr(terms["pole_angle"], "history_length", 0),
+                ),
+                "cart_vel": mjswan.ObservationTermCfg(
+                    func=obs_fns.joint_vel_rel,
+                    params={
+                        "entity_name": "cartpole",
+                        "joint_names": ["slider"],
+                    },
+                    scale=getattr(terms["cart_vel"], "scale", None),
+                    clip=getattr(terms["cart_vel"], "clip", None),
+                    history_length=getattr(terms["cart_vel"], "history_length", 0),
+                ),
+                "pole_vel": mjswan.ObservationTermCfg(
+                    func=obs_fns.joint_vel_rel,
+                    params={
+                        "entity_name": "cartpole",
+                        "joint_names": ["hinge_1"],
+                    },
+                    scale=getattr(terms["pole_vel"], "scale", None),
+                    clip=getattr(terms["pole_vel"], "clip", None),
+                    history_length=getattr(terms["pole_vel"], "history_length", 0),
+                ),
+            },
+            concatenate_terms=getattr(actor, "concatenate_terms", True),
+            enable_corruption=getattr(actor, "enable_corruption", False),
+            history_length=getattr(actor, "history_length", None),
+        )
+    }
 
 
 def register_custom_observations(env_cfg: Any) -> None:

@@ -9,7 +9,6 @@ from __future__ import annotations
 from mjlab.tasks.registry import load_env_cfg
 
 import mjswan
-from mjswan.envs.mdp import observations as obs_fns
 
 if __name__ == "__main__" and __package__ is None:
     import sys
@@ -20,17 +19,14 @@ if __name__ == "__main__" and __package__ is None:
 
 from . import commands  # noqa: F401 - for command registrations
 from .events import register_custom_events
-from .observations import register_custom_observations
+from .observations import get_policy_observations, register_custom_observations
 from .terminations import register_custom_terminations
-
-pole_angle_cos_sin = obs_fns.joint_pos_cos_sin  # cartpole semantic alias
 
 ENTITY = "ttktjmt-org"
 PROJECT = "mjlab"
 TASK_RUN_ID_MAP: dict[str, str | list[str]] = {
-    # TODO: Add custom mdp conponents for cartpole tasks
-    # "Mjlab-Cartpole-Balance": "cartpole-balance-v2",
-    # "Mjlab-Cartpole-Swingup": "cartpole-swingup",
+    "Mjlab-Cartpole-Balance": "cartpole-balance-v2",
+    "Mjlab-Cartpole-Swingup": "cartpole-swingup",
     "Mjlab-Lift-Cube-Yam": "ajfybu8m",
     "Mjlab-Velocity-Flat-Unitree-G1": "vel-flat-g1",
     "Mjlab-Velocity-Flat-Unitree-Go1": "vel-flat-go1-v3",
@@ -38,6 +34,20 @@ TASK_RUN_ID_MAP: dict[str, str | list[str]] = {
     "Mjlab-Velocity-Rough-Unitree-Go1": ["basgo8hx", "ad4peite"],
 }
 TASK_VIEWER_CONFIG_MAP: dict[str, mjswan.ViewerConfig] = {
+    "Mjlab-Cartpole-Balance": mjswan.ViewerConfig(
+        lookat=(0.0, 0.0, 1.0),
+        distance=4.0,
+        elevation=-15.0,
+        azimuth=90.0,
+        origin_type=mjswan.ViewerConfig.OriginType.WORLD,
+    ),
+    "Mjlab-Cartpole-Swingup": mjswan.ViewerConfig(
+        lookat=(0.0, 0.0, 1.0),
+        distance=4.0,
+        elevation=-15.0,
+        azimuth=90.0,
+        origin_type=mjswan.ViewerConfig.OriginType.WORLD,
+    ),
     "Mjlab-Lift-Cube-Yam": mjswan.ViewerConfig(
         lookat=(0.2, 0.0, 0.4),
         distance=2.0,
@@ -80,7 +90,7 @@ TASK_VIEWER_CONFIG_MAP: dict[str, mjswan.ViewerConfig] = {
 
 
 def main():
-    builder = mjswan.Builder(mt=True)
+    builder = mjswan.Builder()
     project = builder.add_project(name="mjlab Tasks")
 
     for task_id, wandb_run_id in TASK_RUN_ID_MAP.items():
@@ -98,7 +108,7 @@ def main():
         scene.add_policy_from_wandb(
             wandb_paths,
             task_id=task_id,
-            observations={"policy": env_cfg.observations["actor"]},
+            observations=get_policy_observations(task_id, env_cfg),
             commands=env_cfg.commands,
             actions=env_cfg.actions,
             terminations=env_cfg.terminations,
